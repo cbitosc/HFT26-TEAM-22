@@ -10,7 +10,7 @@
     "clean": "rm -rf dist server.js",
     "typecheck": "tsc --noEmit",
     "lint": "tsc --noEmit",
-    "test": "tsx --test tests/mesh.test.ts",
+    "test": "tsx --test tests/*.test.ts",
     "cap:sync": "cap sync android",
     "android:run": "cap run android"
   },

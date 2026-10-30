@@ -152,13 +152,28 @@ export async function translateEmergencyText(
   text: string,
   targetLang: string,
   config: FeatherlessConfig
-): Promise<TranslationResult> {
-  return callFeatherlessStructured(
-    config,
-    `Translate the emergency message accurately into ${targetLang}. Return JSON: {"translatedText": string, "detectedSourceLang": string, "targetLang": "${targetLang}"}.`,
-    text.slice(0, 1000),
-    TranslationResultSchema
-  );
+): Promise<{ result: TranslationResult; source: 'featherless' | 'unavailable' }> {
+  try {
+    const res = await callFeatherlessStructured(
+      config,
+      `Translate the emergency message accurately into ${targetLang}. Return JSON: {"translatedText": string, "detectedSourceLang": string, "targetLang": "${targetLang}"}.`,
+      text.slice(0, 1000),
+      TranslationResultSchema
+    );
+    return { result: res, source: 'featherless' };
+  } catch {
+    // Offline, no API key, or the API/parse failed — there is no offline rule-based translator,
+    // so unlike the other AI functions this has no local fallback result. Return a clearly
+    // labeled "unavailable" state instead of throwing, matching every other AI client function.
+    return {
+      source: 'unavailable',
+      result: {
+        translatedText: '',
+        detectedSourceLang: 'unknown',
+        targetLang,
+      },
+    };
+  }
 }
 
 export async function classifyUrgencyWithAI(

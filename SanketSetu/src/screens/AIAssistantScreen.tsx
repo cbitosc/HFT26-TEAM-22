@@ -121,20 +121,20 @@ export function AIAssistantScreen() {
     if (!effectiveOnline) return;
     setLoading(true);
     try {
-      const res = await translateEmergencyText(inputText, targetLang, config);
-      setOutputSource('featherless');
-      setOutputTitle(`Translated to ${res.targetLang}`);
-      setOutputBody(res.translatedText);
-      setOutputBullets([`Detected source language: ${res.detectedSourceLang}`]);
-    } catch (err) {
-      setOutputSource('offline-fallback');
-      setOutputTitle('Online Translation Unavailable');
-      setOutputBody(
-        err instanceof Error
-          ? err.message
-          : 'Configure Featherless.ai API key in Settings to use neural translation.'
-      );
-      setOutputBullets([]);
+      const { result, source } = await translateEmergencyText(inputText, targetLang, config);
+      if (source === 'unavailable') {
+        setOutputSource('offline-fallback');
+        setOutputTitle('Online Translation Unavailable');
+        setOutputBody(
+          'Configure a Featherless.ai API key in Settings to use neural translation.'
+        );
+        setOutputBullets([]);
+      } else {
+        setOutputSource('featherless');
+        setOutputTitle(`Translated to ${result.targetLang}`);
+        setOutputBody(result.translatedText);
+        setOutputBullets([`Detected source language: ${result.detectedSourceLang}`]);
+      }
     } finally {
       setLoading(false);
     }
