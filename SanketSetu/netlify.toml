@@ -1,0 +1,7 @@
+# Static deploy of the browser build (simulated mesh). The Android app is built separately.
+[build]
+  command = "npm ci && npm run build"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "22"
