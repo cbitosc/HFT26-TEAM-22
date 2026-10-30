@@ -97,7 +97,7 @@ export function AlertsFeedScreen({ onNavigate }: AlertsFeedScreenProps) {
     <section className="mx-auto w-full max-w-5xl px-4 pt-2 pb-28 sm:px-6">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <span className="type-mono-label text-[var(--accent-coral)]">
+          <span className="type-mono-label text-[var(--sos-ink)]">
             04 / 08 — priority emergency feed (sorted: prio → recency → hops)
           </span>
           <h1 className="type-h2 mt-0.5 font-grotesk text-[var(--fg)] lowercase">
@@ -126,7 +126,7 @@ export function AlertsFeedScreen({ onNavigate }: AlertsFeedScreenProps) {
             onClick={() => onNavigate('ai')}
             className="flex min-h-[44px] cursor-pointer items-center gap-1.5 rounded-full border border-[var(--line)] bg-[var(--surface)] px-4 py-2 font-mono text-xs font-bold text-[var(--fg)] hover:bg-[var(--surface-2)]"
           >
-            <Sparkles className="h-3.5 w-3.5 text-[var(--accent-lilac)]" />
+            <Sparkles className="h-3.5 w-3.5 text-[var(--relay-ink)]" />
             <span>ai triage</span>
           </button>
 
@@ -146,7 +146,7 @@ export function AlertsFeedScreen({ onNavigate }: AlertsFeedScreenProps) {
         <div className="flex items-center gap-2">
           {myResponderCert ? (
             <>
-              <Unlock className="h-4 w-4 text-[var(--accent-blue)]" />
+              <Unlock className="h-4 w-4 text-[var(--verified-ink)]" />
               <span className="font-mono font-bold text-[var(--fg)]">
                 ✔ Enrolled as Verified Responder ({myResponderCert.role} ·{' '}
                 {myResponderCert.organizationName}) — Exact sealed SOS GPS coordinates are UNLOCKED.
@@ -154,7 +154,7 @@ export function AlertsFeedScreen({ onNavigate }: AlertsFeedScreenProps) {
             </>
           ) : (
             <>
-              <Lock className="h-4 w-4 text-[var(--accent-coral)]" />
+              <Lock className="h-4 w-4 text-[var(--sos-ink)]" />
               <span className="font-mono text-[var(--muted)]">
                 Standard Civilian Node — You see coarse (~1km) SOS coordinates. Exact 5-decimal GPS is sealed to Verified Responders.
               </span>
@@ -170,7 +170,7 @@ export function AlertsFeedScreen({ onNavigate }: AlertsFeedScreenProps) {
                 'NDRF Field Rescue Unit (DEMO AUTHORITY)'
               )
             }
-            className="min-h-[36px] cursor-pointer rounded-full bg-[var(--accent-green)] px-3.5 py-1.5 font-mono text-[10px] font-bold text-[#0B0B0B] uppercase"
+            className="min-h-[36px] cursor-pointer rounded-full bg-[var(--accent-green)] px-3.5 py-1.5 font-mono text-[10px] font-bold text-[var(--on-fill)] uppercase"
           >
             enroll demo responder cert ✔ (unseal gps)
           </button>
@@ -199,16 +199,16 @@ export function AlertsFeedScreen({ onNavigate }: AlertsFeedScreenProps) {
                       PEOPLE)
                     </span>
                   )}
-                  <span className="rounded-full bg-[var(--accent-lilac)] px-3 py-1 font-mono text-xs font-bold text-[#0B0B0B]">
+                  <span className="rounded-full bg-[var(--accent-lilac)] px-3 py-1 font-mono text-xs font-bold text-[var(--on-fill)]">
                     {alert.hops === 0
                       ? 'LOCAL ORIGIN (0 HOPS)'
                       : `${alert.hops} HOP${alert.hops > 1 ? 'S' : ''} AWAY`}
                   </span>
-                  <span className="rounded-full border border-[var(--line)] bg-[var(--surface-2)] px-3 py-1 font-mono text-xs font-bold text-[var(--accent-blue)]">
+                  <span className="rounded-full border border-[var(--line)] bg-[var(--surface-2)] px-3 py-1 font-mono text-xs font-bold text-[var(--verified-ink)]">
                     Reached {alert.reachedNodeIds.length} node(s) (lower bound)
                   </span>
                   {alert.bridgedOnline && (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-[var(--accent-green)] px-3 py-1 font-mono text-xs font-bold text-[#0B0B0B]">
+                    <span className="inline-flex items-center gap-1 rounded-full bg-[var(--accent-green)] px-3 py-1 font-mono text-xs font-bold text-[var(--on-fill)]">
                       <Globe className="h-3 w-3" />
                       <span>SETU BRIDGED ONLINE (DEMO)</span>
                     </span>
@@ -216,7 +216,7 @@ export function AlertsFeedScreen({ onNavigate }: AlertsFeedScreenProps) {
                 </div>
 
                 <div className="flex items-center gap-1.5 font-mono text-xs text-[var(--muted)]">
-                  <ShieldCheck className="h-4 w-4 text-[var(--accent-blue)]" />
+                  <ShieldCheck className="h-4 w-4 text-[var(--verified-ink)]" />
                   <span>Ed25519 Verified · #{alert.senderId}</span>
                 </div>
               </div>
@@ -237,7 +237,7 @@ export function AlertsFeedScreen({ onNavigate }: AlertsFeedScreenProps) {
                     </span>
                     <span>·</span>
                     <span className="inline-flex items-center gap-1">
-                      <Radio className="h-3.5 w-3.5 text-[var(--accent-lilac)]" />
+                      <Radio className="h-3.5 w-3.5 text-[var(--relay-ink)]" />
                       <span>Route: {alert.route.join(' → ')}</span>
                     </span>
 
@@ -248,7 +248,7 @@ export function AlertsFeedScreen({ onNavigate }: AlertsFeedScreenProps) {
                         <>
                           <span>·</span>
                           {alert.unsealedPreciseLocation ? (
-                            <span className="inline-flex items-center gap-1 rounded-full bg-[var(--accent-green)] px-2.5 py-0.5 font-bold text-[#0B0B0B]">
+                            <span className="inline-flex items-center gap-1 rounded-full bg-[var(--accent-green)] px-2.5 py-0.5 font-bold text-[var(--on-fill)]">
                               <Unlock className="h-3 w-3" />
                               <span>
                                 UNSEALED EXACT GPS:{' '}
@@ -258,7 +258,7 @@ export function AlertsFeedScreen({ onNavigate }: AlertsFeedScreenProps) {
                               </span>
                             </span>
                           ) : (
-                            <span className="inline-flex items-center gap-1 text-[var(--accent-blue)]">
+                            <span className="inline-flex items-center gap-1 text-[var(--verified-ink)]">
                               <MapPin className="h-3.5 w-3.5" />
                               <span>
                                 COARSE (~1KM): {alert.lat.toFixed(2)},{' '}
@@ -301,7 +301,7 @@ export function AlertsFeedScreen({ onNavigate }: AlertsFeedScreenProps) {
                     }
                     className={`flex min-h-[46px] cursor-pointer items-center gap-1.5 rounded-full px-4 py-2 font-mono text-xs font-bold uppercase transition-colors ${
                       alert.respondingByMe
-                        ? 'bg-[var(--accent-green)] text-[#0B0B0B]'
+                        ? 'bg-[var(--accent-green)] text-[var(--on-fill)]'
                         : 'bg-[var(--fg)] text-[var(--bg)]'
                     }`}
                   >
@@ -320,7 +320,7 @@ export function AlertsFeedScreen({ onNavigate }: AlertsFeedScreenProps) {
                           true
                         )
                       }
-                      className="flex min-h-[46px] cursor-pointer items-center rounded-full bg-[var(--accent-green)] px-3.5 py-2 font-mono text-[11px] font-bold text-[#0B0B0B] uppercase"
+                      className="flex min-h-[46px] cursor-pointer items-center rounded-full bg-[var(--accent-green)] px-3.5 py-2 font-mono text-[11px] font-bold text-[var(--on-fill)] uppercase"
                     >
                       sim medic-d ack ✔
                     </button>
@@ -354,17 +354,17 @@ export function AlertsFeedScreen({ onNavigate }: AlertsFeedScreenProps) {
                           {ack.responderName}
                         </span>
                         {ack.verifiedCert ? (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-[var(--accent-green)] px-2.5 py-0.5 text-[10px] font-bold text-[#0B0B0B]">
+                          <span className="inline-flex items-center gap-1 rounded-full bg-[var(--accent-green)] px-2.5 py-0.5 text-[10px] font-bold text-[var(--on-fill)]">
                             <ShieldCheck className="h-3 w-3" />
                             <span>✔ VERIFIED ({ack.certRole})</span>
                           </span>
                         ) : (
                           <span className="inline-flex items-center gap-1 rounded-full border border-[var(--line)] bg-[var(--surface)] px-2.5 py-0.5 text-[10px] text-[var(--muted)] uppercase">
-                            <ShieldAlert className="h-3 w-3 text-[var(--accent-coral)]" />
+                            <ShieldAlert className="h-3 w-3 text-[var(--sos-ink)]" />
                             <span>unverified</span>
                           </span>
                         )}
-                        <span className="text-[11px] text-[var(--accent-blue)] uppercase">
+                        <span className="text-[11px] text-[var(--verified-ink)] uppercase">
                           {ack.status} · {ack.hops} hop{ack.hops === 1 ? '' : 's'}
                         </span>
                       </div>

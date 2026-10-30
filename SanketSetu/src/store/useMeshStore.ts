@@ -60,15 +60,16 @@ import {
   CongestionBenchmarkSummary,
   MeshQualitySnapshot,
 } from '../mesh/metrics';
+import { PersistedSeenRow } from '../mesh/seenCache';
 import {
   getOrCreateLocalVaultKey,
   loadKvJson,
   loadUnexpiredSeenEntries,
-  persistSeenEntry,
   sanketDb,
   saveKvJson,
 } from '../db/dexie';
 import { DEFAULT_FEATHERLESS_MODEL } from '../ai/featherless';
+import { applyTheme, readInitialTheme, ThemeMode } from '../ui/theme';
 
 export interface VirtualPeerInstance {
   identity: NodeIdentity;
@@ -105,6 +106,12 @@ export interface MeshStoreState {
 
   /** Count of peers currently connected over the real Nearby Connections radio (0 off native, or with no real peers in range). */
   realRadioPeerCount: number;
+
+  // UI preferences (persisted in the kv table)
+  theme: ThemeMode;
+  /** Opt-in Three.js orb. Default off: the CSS orb is used unless the user enables this. */
+  visuals3D: boolean;
+  darkSuggestionDismissed: boolean;
 
   // Live Mesh State
   peers: PeerNode[];
@@ -240,12 +247,77 @@ export interface MeshStoreState {
   /** Opens this app's system Settings page. */
   openAppSettings: () => Promise<void>;
   dismissPermissionGate: () => void;
+
+  setTheme: (mode: ThemeMode) => void;
+  setVisuals3D: (enabled: boolean) => void;
+  dismissDarkSuggestion: () => void;
 }
 
 const simController = new SimNetworkController();
 let localEngine: MeshEngine | null = null;
 let nativeNearbyTransport: NearbyTransport | null = null;
 const virtualInstances = new Map<string, VirtualPeerInstance>();
+
+// --- UI update throttling -----------------------------------------------------------------
+// The engine notifies after every packet and the simulator after every transmission; pushing
+// each of those straight into React re-rendered every subscriber dozens of times per second.
+// High-frequency sources go through these throttles (<= 4 UI updates/sec); explicit user
+// actions still call syncStoreFromEngine directly so their result shows immediately.
+const UI_SYNC_INTERVAL_MS = 250;
+const TELEMETRY_INTERVAL_MS = 1000;
+const SEEN_PERSIST_INTERVAL_MS = 1000;
+let lastQualitySnapshotAt = 0;
+let pendingSyncTimer: ReturnType<typeof setTimeout> | null = null;
+let pendingTransmissions: SimLinkTransmissionEvent[] = [];
+let pendingTransmissionTimer: ReturnType<typeof setTimeout> | null = null;
+let pendingSeenRows: PersistedSeenRow[] = [];
+let pendingSeenTimer: ReturnType<typeof setTimeout> | null = null;
+
+function shallowEqualRecord<T extends object>(a: T, b: T): boolean {
+  const ka = Object.keys(a) as (keyof T)[];
+  if (ka.length !== Object.keys(b).length) return false;
+  return ka.every((k) => a[k] === b[k]);
+}
+
+function scheduleThrottledSync(
+  set: (partial: Partial<MeshStoreState>) => void,
+  get: () => MeshStoreState
+): void {
+  if (pendingSyncTimer !== null) return;
+  pendingSyncTimer = setTimeout(() => {
+    pendingSyncTimer = null;
+    syncStoreFromEngine(set, get);
+  }, UI_SYNC_INTERVAL_MS);
+}
+
+function queueSimTransmission(
+  ev: SimLinkTransmissionEvent,
+  set: (partial: Partial<MeshStoreState>) => void,
+  get: () => MeshStoreState
+): void {
+  pendingTransmissions.unshift(ev);
+  if (pendingTransmissionTimer !== null) return;
+  pendingTransmissionTimer = setTimeout(() => {
+    pendingTransmissionTimer = null;
+    const merged = [...pendingTransmissions, ...get().simTransmissions].slice(0, 28);
+    pendingTransmissions = [];
+    set({ simTransmissions: merged });
+  }, UI_SYNC_INTERVAL_MS);
+}
+
+/** Batches seen-cache rows into one Dexie bulkPut per second instead of one write per packet. */
+function queueSeenPersist(row: PersistedSeenRow): void {
+  pendingSeenRows.push(row);
+  if (pendingSeenTimer !== null) return;
+  pendingSeenTimer = setTimeout(() => {
+    pendingSeenTimer = null;
+    const rows = pendingSeenRows;
+    pendingSeenRows = [];
+    void sanketDb.seen.bulkPut(rows).catch(() => {
+      // IndexedDB unavailable (private mode / tests) — the in-memory seen-cache still works.
+    });
+  }, SEEN_PERSIST_INTERVAL_MS);
+}
 
 /**
  * Persists a NodeIdentity split as public fields (plaintext) + secret keys (always
@@ -395,6 +467,21 @@ function syncStoreFromEngine(
     peers.filter((p) => p.isDirectNeighbor).length
   );
 
+  // Telemetry cards: recompute the (comparatively expensive) quality snapshot at most once per
+  // second, and keep the previous object reference when nothing changed so selectors on
+  // `metrics` / `meshQuality` don't re-render for identical values.
+  const prev = get();
+  const nextMetrics = shallowEqualRecord(prev.metrics, metrics) ? prev.metrics : metrics;
+  const now = Date.now();
+  let nextQuality = prev.meshQuality;
+  if (now - lastQualitySnapshotAt >= TELEMETRY_INTERVAL_MS) {
+    lastQualitySnapshotAt = now;
+    const snapshot = localEngine.getMeshQualitySnapshot();
+    if (JSON.stringify(snapshot) !== JSON.stringify(prev.meshQuality)) {
+      nextQuality = snapshot;
+    }
+  }
+
   set({
     peers,
     messages: localEngine.getMessages(),
@@ -402,8 +489,8 @@ function syncStoreFromEngine(
     hazards: localEngine.getHazards(),
     circles,
     outbox: localEngine.outbox.getAllEntries(),
-    metrics,
-    meshQuality: localEngine.getMeshQualitySnapshot(),
+    metrics: nextMetrics,
+    meshQuality: nextQuality,
     dropLog: localEngine.getDropLog(),
     simNodes: simController.getNodes(),
     simLinks: simController.getAllLinks(),
@@ -484,7 +571,7 @@ async function setupDefaultFourNodeChain(
   const persistedSeen = await loadUnexpiredSeenEntries();
   localEngine.seenCache.hydrateFromStorage(persistedSeen);
   localEngine.seenCache.setPersistCallback((row) => {
-    void persistSeenEntry(row);
+    queueSeenPersist(row);
   });
 
   const virtualSpecs = [
@@ -549,7 +636,7 @@ async function setupDefaultFourNodeChain(
   }
 
   localEngine.onStateChange(() => {
-    syncStoreFromEngine(set, get);
+    scheduleThrottledSync(set, get);
   });
 
   await localEngine.start();
@@ -649,6 +736,10 @@ export const useMeshStore = create<MeshStoreState>((set, get) => ({
   permissionState: null,
   permissionGateDismissed: false,
   realRadioPeerCount: 0,
+
+  theme: readInitialTheme(),
+  visuals3D: false,
+  darkSuggestionDismissed: false,
 
   peers: [],
   messages: [],
@@ -776,13 +867,11 @@ export const useMeshStore = create<MeshStoreState>((set, get) => ({
     }
 
     simController.onTransmission((ev) => {
-      set({
-        simTransmissions: [ev, ...get().simTransmissions.slice(0, 28)],
-      });
+      queueSimTransmission(ev, set, get);
     });
 
     simController.onTopologyChange(() => {
-      syncStoreFromEngine(set, get);
+      scheduleThrottledSync(set, get);
     });
 
     const savedIdentity = await loadPersistedIdentity();
@@ -790,6 +879,16 @@ export const useMeshStore = create<MeshStoreState>((set, get) => ({
     const savedAiKey = await loadKvJson<string>('featherless_api_key');
     const savedAiModel = await loadKvJson<string>('featherless_model');
     const savedCert = await loadKvJson<ResponderCertificate>('responder_cert');
+    const savedTheme = await loadKvJson<ThemeMode>('ui_theme');
+    const savedVisuals3D = await loadKvJson<boolean>('ui_visuals_3d');
+    const savedDarkDismissed = await loadKvJson<boolean>('ui_dark_suggestion_dismissed');
+    const theme: ThemeMode = savedTheme === 'dark' ? 'dark' : 'light';
+    applyTheme(theme);
+    set({
+      theme,
+      visuals3D: savedVisuals3D === true,
+      darkSuggestionDismissed: savedDarkDismissed === true,
+    });
 
     const activeIdentity = savedIdentity ?? get().identity;
     if (!savedIdentity) {
@@ -1461,4 +1560,20 @@ export const useMeshStore = create<MeshStoreState>((set, get) => ({
   },
 
   dismissPermissionGate: () => set({ permissionGateDismissed: true }),
+
+  setTheme: (mode: ThemeMode) => {
+    applyTheme(mode);
+    set({ theme: mode });
+    void saveKvJson('ui_theme', mode);
+  },
+
+  setVisuals3D: (enabled: boolean) => {
+    set({ visuals3D: enabled });
+    void saveKvJson('ui_visuals_3d', enabled);
+  },
+
+  dismissDarkSuggestion: () => {
+    set({ darkSuggestionDismissed: true });
+    void saveKvJson('ui_dark_suggestion_dismissed', true);
+  },
 }));

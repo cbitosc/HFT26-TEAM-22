@@ -140,7 +140,7 @@ export function SimulatorScreen() {
     <section className="mx-auto w-full max-w-5xl px-4 pt-2 pb-28 sm:px-6">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <div>
-          <span className="type-mono-label text-[var(--accent-lilac)]">
+          <span className="type-mono-label text-[var(--relay-ink)]">
             06 / 07 — interactive multi-node mesh testbed ({sanketContent.simulatedBadge})
           </span>
           <h1 className="type-h2 mt-0.5 font-grotesk text-[var(--fg)] lowercase">
@@ -177,7 +177,7 @@ export function SimulatorScreen() {
               type="button"
               onClick={() => void handleTestMultiHopSend()}
               data-testid="sim-send-multihop"
-              className="flex min-h-[48px] cursor-pointer items-center gap-2 rounded-full bg-[var(--accent-green)] px-5 py-2.5 font-grotesk text-xs font-bold text-[#0B0B0B] shadow-xs"
+              className="flex min-h-[48px] cursor-pointer items-center gap-2 rounded-full bg-[var(--accent-green)] px-5 py-2.5 font-grotesk text-xs font-bold text-[var(--on-fill)] shadow-xs"
             >
               <Play className="h-4 w-4" />
               <span>1. send e2e message a → d (3 hops)</span>
@@ -190,7 +190,7 @@ export function SimulatorScreen() {
               className={`flex min-h-[48px] cursor-pointer items-center gap-2 rounded-full border px-5 py-2.5 font-grotesk text-xs font-bold transition-colors ${
                 linkBC?.manuallyBlocked
                   ? 'border-[var(--accent-blue)] bg-[var(--accent-blue)] text-white'
-                  : 'border-[var(--accent-coral)] bg-[var(--accent-coral)]/15 text-[var(--accent-coral)]'
+                  : 'border-[var(--accent-coral)] bg-[var(--accent-coral)]/15 text-[var(--sos-ink)]'
               }`}
             >
               {linkBC?.manuallyBlocked ? (
@@ -278,9 +278,9 @@ export function SimulatorScreen() {
                       y2={nB.y}
                       stroke={
                         link.active
-                          ? '#2D5BFF'
+                          ? 'var(--verified)'
                           : link.manuallyBlocked
-                            ? '#FF6A4D'
+                            ? 'var(--sos)'
                             : 'rgba(120,120,120,0.3)'
                       }
                       strokeWidth={link.active ? 3.5 : 2.5}
@@ -292,7 +292,7 @@ export function SimulatorScreen() {
                       width={96}
                       height={24}
                       rx={12}
-                      fill={link.manuallyBlocked ? '#FF6A4D' : 'var(--surface)'}
+                      fill={link.manuallyBlocked ? 'var(--sos)' : 'var(--surface)'}
                       stroke="var(--line)"
                     />
                     <text
@@ -302,7 +302,7 @@ export function SimulatorScreen() {
                       fontSize="10"
                       fontFamily="monospace"
                       fontWeight="bold"
-                      fill={link.manuallyBlocked ? '#FFFFFF' : 'var(--fg)'}
+                      fill={link.manuallyBlocked ? 'var(--on-sos)' : 'var(--fg)'}
                     >
                       {link.manuallyBlocked
                         ? 'BROKEN (TAP)'
@@ -331,7 +331,7 @@ export function SimulatorScreen() {
                       <circle
                         r={simRadioRange}
                         fill="none"
-                        stroke="#2D5BFF"
+                        stroke="var(--verified)"
                         strokeWidth={1.5}
                         strokeDasharray="6 6"
                       />
@@ -340,14 +340,14 @@ export function SimulatorScreen() {
                       r={28}
                       fill={
                         !node.online
-                          ? '#6B6B66'
+                          ? 'var(--fg-secondary)'
                           : isMe
-                            ? '#C6FF3D'
+                            ? 'var(--lime)'
                             : idx === simNodes.length - 1
-                              ? '#2D5BFF'
-                              : '#B79CFF'
+                              ? 'var(--verified)'
+                              : 'var(--relay)'
                       }
-                      stroke="#0B0B0B"
+                      stroke="var(--fg)"
                       strokeWidth={2.5}
                     />
                     <text
@@ -358,8 +358,8 @@ export function SimulatorScreen() {
                       fontWeight="bold"
                       fill={
                         !node.online || idx === simNodes.length - 1
-                          ? '#FFFFFF'
-                          : '#0B0B0B'
+                          ? 'var(--on-sos)'
+                          : 'var(--on-fill)'
                       }
                     >
                       {labelLetter}
@@ -478,7 +478,7 @@ export function SimulatorScreen() {
               <span className="type-mono-label text-[var(--muted)]">
                 delivery transitions ({messages.length})
               </span>
-              <span className="font-mono text-[10px] font-bold text-[var(--accent-lilac)]">
+              <span className="font-mono text-[10px] font-bold text-[var(--relay-ink)]">
                 Outbox: {outbox.length}
               </span>
             </div>
@@ -502,8 +502,8 @@ export function SimulatorScreen() {
                           m.deliveryState === 'DELIVERED'
                             ? 'bg-[var(--accent-blue)] text-white'
                             : m.deliveryState === 'RELAYED'
-                              ? 'bg-[var(--accent-lilac)] text-[#0B0B0B]'
-                              : 'bg-[var(--accent-green)] text-[#0B0B0B]'
+                              ? 'bg-[var(--accent-lilac)] text-[var(--on-fill)]'
+                              : 'bg-[var(--accent-green)] text-[var(--on-fill)]'
                         }`}
                       >
                         {m.deliveryState} ({m.relayedHops}h)
@@ -512,7 +512,7 @@ export function SimulatorScreen() {
                     <div className="mt-1 truncate text-[11px] text-[var(--muted)]">
                       {m.text}
                     </div>
-                    <div className="mt-1 text-[10px] text-[var(--accent-blue)]">
+                    <div className="mt-1 text-[10px] text-[var(--verified-ink)]">
                       Route: {m.route.join(' → ')}
                     </div>
                   </div>
@@ -529,7 +529,7 @@ export function SimulatorScreen() {
       >
         <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
-            <Activity className="h-4 w-4 text-[var(--accent-blue)]" />
+            <Activity className="h-4 w-4 text-[var(--verified-ink)]" />
             <span className="type-mono-label text-[var(--fg)]">
               mesh quality & per-priority telemetry ({sanketContent.simulatedBadge})
             </span>
@@ -548,7 +548,7 @@ export function SimulatorScreen() {
               CONGESTION BENCHMARK · P0 SOS BYPASS VS P2/P3 NORMAL QUEUE
             </span>
             {meshQuality.lastBenchmark && (
-              <span className="rounded-full bg-[var(--accent-green)] px-2.5 py-0.5 font-mono text-[10px] font-bold text-[#0B0B0B]">
+              <span className="rounded-full bg-[var(--accent-green)] px-2.5 py-0.5 font-mono text-[10px] font-bold text-[var(--on-fill)]">
                 P0 SOS {meshQuality.lastBenchmark.sosBypassSpeedupFactor}x FASTER UNDER LOAD
               </span>
             )}
@@ -557,7 +557,7 @@ export function SimulatorScreen() {
           {meshQuality.lastBenchmark ? (
             <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
               <div className="rounded-xl border border-[var(--accent-coral)]/40 bg-[var(--surface)] p-3">
-                <div className="font-mono text-[10px] font-bold text-[var(--accent-coral)] uppercase">
+                <div className="font-mono text-[10px] font-bold text-[var(--sos-ink)] uppercase">
                   P0 · SOS Beacon Latency (0–10ms Jitter)
                 </div>
                 <div className="mt-1 font-grotesk text-2xl font-bold text-[var(--fg)]">
@@ -569,7 +569,7 @@ export function SimulatorScreen() {
               </div>
 
               <div className="rounded-xl border border-[var(--line)] bg-[var(--surface)] p-3">
-                <div className="font-mono text-[10px] font-bold text-[var(--accent-blue)] uppercase">
+                <div className="font-mono text-[10px] font-bold text-[var(--verified-ink)] uppercase">
                   P2 · Normal Mean Latency ({meshQuality.lastBenchmark.floodPacketsCount} Flood Pkts)
                 </div>
                 <div className="mt-1 font-grotesk text-2xl font-bold text-[var(--fg)]">
@@ -581,7 +581,7 @@ export function SimulatorScreen() {
               </div>
 
               <div className="rounded-xl border border-[var(--line)] bg-[var(--surface)] p-3">
-                <div className="font-mono text-[10px] font-bold text-[var(--accent-lilac)] uppercase">
+                <div className="font-mono text-[10px] font-bold text-[var(--relay-ink)] uppercase">
                   Priority Advantage Ratio
                 </div>
                 <div className="mt-1 font-grotesk text-2xl font-bold text-[var(--fg)]">
@@ -622,7 +622,7 @@ export function SimulatorScreen() {
                     <td className="py-2 pr-3 font-bold">{row.label}</td>
                     <td className="px-2 py-2">{row.sentCount}</td>
                     <td className="px-2 py-2">{row.deliveredCount}</td>
-                    <td className="px-2 py-2 font-bold text-[var(--accent-blue)]">
+                    <td className="px-2 py-2 font-bold text-[var(--verified-ink)]">
                       {row.deliveryRatioPct}%
                     </td>
                     <td className="px-2 py-2">
@@ -661,7 +661,7 @@ export function SimulatorScreen() {
             </span>
             <span>
               Invalid Sig Drops:{' '}
-              <strong className="text-[var(--accent-coral)]">
+              <strong className="text-[var(--sos-ink)]">
                 {meshQuality.dropCounts.invalid_signature}
               </strong>
             </span>
@@ -679,7 +679,7 @@ export function SimulatorScreen() {
             </span>
           </div>
           {dropLog.length > 0 && (
-            <span className="truncate text-[10px] text-[var(--accent-lilac)]">
+            <span className="truncate text-[10px] text-[var(--relay-ink)]">
               Last drop: [{dropLog[dropLog.length - 1].reason}]{' '}
               {dropLog[dropLog.length - 1].detail}
             </span>

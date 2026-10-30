@@ -7,13 +7,8 @@ import React, { Suspense, lazy, useEffect, useState } from 'react';
 import { AppScreenId, MOBILE_TABS } from './content';
 import { useReducedMotion } from './hooks/useReducedMotion';
 import { soundEngine } from './lib/audio';
-import {
-  scrollState,
-  setDiscreteState,
-  setThemePreference,
-  subscribeScrollStore,
-  ThemeMode,
-} from './lib/scroll';
+import { setDiscreteState } from "./lib/scroll";
+import { ThemeMode } from "./ui/theme";
 
 import { Preloader } from './scenes/Preloader';
 import { Grain } from './components/Grain';
@@ -111,13 +106,13 @@ export default function App() {
     return 'home';
   });
 
-  const [uiState, setUiState] = useState<{
-    theme: ThemeMode;
-    isMuted: boolean;
-  }>(() => ({
-    theme: scrollState.theme,
-    isMuted: scrollState.isMuted,
-  }));
+  const theme = useMeshStore((s) => s.theme);
+  const setTheme = useMeshStore((s) => s.setTheme);
+  const isSaverMode = useMeshStore((s) => s.metrics.powerMode === 'saver');
+  const darkSuggestionDismissed = useMeshStore((s) => s.darkSuggestionDismissed);
+  const dismissDarkSuggestion = useMeshStore((s) => s.dismissDarkSuggestion);
+  const showDarkSuggestion = isSaverMode && theme === 'light' && !darkSuggestionDismissed;
+  const [isMuted, setIsMuted] = useState(() => soundEngine.isMuted());
 
   // Initialize mesh engine, virtual 4-node chain, and Dexie store once on mount
   useEffect(() => {
@@ -134,15 +129,7 @@ export default function App() {
     return () => window.clearTimeout(timer);
   }, [isPreloading]);
 
-  // Subscribe to theme & mute state
-  useEffect(() => {
-    return subscribeScrollStore(() => {
-      setUiState({
-        theme: scrollState.theme,
-        isMuted: scrollState.isMuted,
-      });
-    });
-  }, []);
+  useEffect(() => soundEngine.subscribe(() => setIsMuted(soundEngine.isMuted())), []);
 
   // Sync Hash Routing (#/home, #/messages, #/sos, #/alerts, #/circles, #/map, #/simulator, #/ai, #/settings)
   useEffect(() => {
@@ -168,52 +155,8 @@ export default function App() {
     }
   };
 
-  const handleToggleTheme = (
-    nextTheme: ThemeMode,
-    ev?: React.MouseEvent
-  ) => {
-    const apply = () => setThemePreference(nextTheme);
-    const docWithVt = document as Document & {
-      startViewTransition?: (cb: () => void) => { ready: Promise<void> };
-    };
-
-    if (
-      !reducedMotion &&
-      typeof docWithVt.startViewTransition === 'function' &&
-      ev
-    ) {
-      const x = ev.clientX;
-      const y = ev.clientY;
-      const endRadius = Math.hypot(
-        Math.max(x, window.innerWidth - x),
-        Math.max(y, window.innerHeight - y)
-      );
-      const vt = docWithVt.startViewTransition(() => {
-        apply();
-      });
-      vt.ready
-        .then(() => {
-          document.documentElement.animate(
-            {
-              clipPath: [
-                `circle(0px at ${x}px ${y}px)`,
-                `circle(${endRadius}px at ${x}px ${y}px)`,
-              ],
-            },
-            {
-              duration: 450,
-              easing: 'cubic-bezier(0.16, 1, 0.3, 1)',
-              pseudoElement: '::view-transition-new(root)',
-            }
-          );
-        })
-        .catch(() => {
-          // fallback already applied
-        });
-    } else {
-      apply();
-    }
-  };
+  // Instant theme switch — no View Transition / clip-path animation.
+  const handleToggleTheme = (nextTheme: ThemeMode) => setTheme(nextTheme);
 
   return (
     <div className="relative min-h-screen w-full bg-[var(--bg)] text-[var(--fg)] transition-colors duration-500">
@@ -232,18 +175,45 @@ export default function App() {
       <TopBar
         activeScreen={activeScreen}
         onNavigate={handleNavigate}
-        theme={uiState.theme}
+        theme={theme}
         onToggleTheme={handleToggleTheme}
-        isMuted={uiState.isMuted}
+        isMuted={isMuted}
         onToggleMute={() => soundEngine.toggleMute()}
       />
+
+      {showDarkSuggestion && (
+        <div
+          role="status"
+          className="mx-auto mt-2 flex w-[calc(100%-32px)] max-w-3xl flex-wrap items-center justify-between gap-2 rounded-[var(--radius)] border border-[var(--line)] bg-[var(--warn-tint)] px-4 py-3"
+        >
+          <span className="text-sm font-medium text-[var(--warn-ink)]">
+            Battery saver is on. Dark mode can save power on OLED screens.
+          </span>
+          <span className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => setTheme('dark')}
+              className="min-h-[44px] rounded-full bg-[var(--fg)] px-4 text-sm font-semibold text-[var(--bg)]"
+            >
+              Use dark mode
+            </button>
+            <button
+              type="button"
+              onClick={dismissDarkSuggestion}
+              className="min-h-[44px] rounded-full border border-[var(--line)] bg-[var(--surface)] px-4 text-sm font-semibold text-[var(--fg)]"
+            >
+              Not now
+            </button>
+          </span>
+        </div>
+      )}
 
       {/* Active Screen Content */}
       <main className="relative z-10 w-full">
         <Suspense fallback={<ScreenLoadingFallback />}>
           {activeScreen === 'home' && (
             <HomeScreen
-              theme={uiState.theme}
+              theme={theme}
               reducedMotion={reducedMotion}
               onNavigate={handleNavigate}
             />

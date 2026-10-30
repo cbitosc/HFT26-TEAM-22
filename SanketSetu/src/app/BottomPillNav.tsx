@@ -87,7 +87,7 @@ export function BottomPillNav({
                   isSos
                     ? isActive || activeSosId
                       ? 'bg-[var(--accent-coral)] text-white shadow-sm'
-                      : 'bg-[var(--accent-coral)]/15 text-[var(--accent-coral)] hover:bg-[var(--accent-coral)]/25'
+                      : 'bg-[var(--accent-coral)]/15 text-[var(--sos-ink)] hover:bg-[var(--accent-coral)]/25'
                     : isActive
                       ? 'bg-[var(--fg)] text-[var(--bg)] shadow-xs'
                       : 'text-[var(--muted)] hover:bg-[var(--surface-2)] hover:text-[var(--fg)]'
@@ -103,7 +103,7 @@ export function BottomPillNav({
                 )}
 
                 {tab.id === 'messages' && messages.length > 0 && !isActive && (
-                  <span className="ml-0.5 hidden h-4 min-w-[16px] items-center justify-center rounded-full bg-[var(--accent-lilac)] px-1 text-[9px] font-bold text-[#0B0B0B] sm:inline-flex">
+                  <span className="ml-0.5 hidden h-4 min-w-[16px] items-center justify-center rounded-full bg-[var(--accent-lilac)] px-1 text-[9px] font-bold text-[var(--on-fill)] sm:inline-flex">
                     {messages.length}
                   </span>
                 )}

@@ -4,6 +4,8 @@ const config: CapacitorConfig = {
   appId: 'org.sanket.mesh',
   appName: 'Sanket',
   webDir: 'dist',
+  // Light WebView background so launch never flashes dark before the app paints.
+  backgroundColor: '#F7F8FA',
   server: {
     androidScheme: 'https',
   },

@@ -8,7 +8,9 @@
  * - Offline QR Scan-to-Trust & Key Fingerprint
  */
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { Toggle } from '../ui/Toggle';
+import { soundEngine } from '../lib/audio';
 import {
   Award,
   Battery,
@@ -32,6 +34,12 @@ import {
 } from '../crypto/responderCert';
 
 export function SettingsScreen() {
+  const theme = useMeshStore((s) => s.theme);
+  const setTheme = useMeshStore((s) => s.setTheme);
+  const visuals3D = useMeshStore((s) => s.visuals3D);
+  const setVisuals3D = useMeshStore((s) => s.setVisuals3D);
+  const [soundMuted, setSoundMuted] = useState(() => soundEngine.isMuted());
+  useEffect(() => soundEngine.subscribe(() => setSoundMuted(soundEngine.isMuted())), []);
   const identity = useMeshStore((s) => s.identity);
   const metrics = useMeshStore((s) => s.metrics);
   const outbox = useMeshStore((s) => s.outbox);
@@ -126,16 +134,41 @@ export function SettingsScreen() {
         </h1>
       </div>
 
+      {/* Display & sound */}
+      <div className="nova-card p-5">
+        <h2 className="mb-2 text-lg font-bold text-[var(--fg)]">Display &amp; sound</h2>
+        <div className="divide-y divide-[var(--line)]">
+          <Toggle
+            label="Dark mode"
+            description="Saves battery on OLED screens."
+            checked={theme === 'dark'}
+            onChange={(on) => setTheme(on ? 'dark' : 'light')}
+          />
+          <Toggle
+            label="3D visuals"
+            description="Uses more battery. Always off on the SOS screen, in Saver mode, and with reduced motion."
+            checked={visuals3D}
+            onChange={setVisuals3D}
+          />
+          <Toggle
+            label="Sounds"
+            description="Short tones when an SOS is sent. Haptics work either way."
+            checked={!soundMuted}
+            onChange={(on) => soundEngine.setMuted(!on)}
+          />
+        </div>
+      </div>
+
       {/* 1. Battery Efficiency, Honest Mesh Activity Meter & Last-Gasp SOS (§6 & §9.9) */}
       <div className="nova-card p-5">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
-            <Battery className="h-5 w-5 text-[var(--accent-green)]" />
+            <Battery className="h-5 w-5 text-[var(--safe-ink)]" />
             <h2 className="font-grotesk text-lg font-bold text-[var(--fg)] lowercase">
               01. battery power modes, activity meter & last-gasp sos
             </h2>
           </div>
-          <span className="rounded-full bg-[var(--accent-green)] px-3 py-1 font-mono text-xs font-bold text-[#0B0B0B]">
+          <span className="rounded-full bg-[var(--accent-green)] px-3 py-1 font-mono text-xs font-bold text-[var(--on-fill)]">
             {metrics.powerMode.toUpperCase()} · {metrics.scanDutyCyclePct}% SCAN DUTY
           </span>
         </div>
@@ -212,7 +245,7 @@ export function SettingsScreen() {
             <div className="text-[10px] text-[var(--muted)] uppercase">
               packets relayed
             </div>
-            <div className="mt-1 text-base font-bold text-[var(--accent-lilac)]">
+            <div className="mt-1 text-base font-bold text-[var(--relay-ink)]">
               {metrics.packetsRelayed}
             </div>
           </div>
@@ -220,7 +253,7 @@ export function SettingsScreen() {
             <div className="text-[10px] text-[var(--muted)] uppercase">
               dedup suppressed
             </div>
-            <div className="mt-1 text-base font-bold text-[var(--accent-blue)]">
+            <div className="mt-1 text-base font-bold text-[var(--verified-ink)]">
               {metrics.packetsSuppressedDuplicate}
             </div>
           </div>
@@ -228,7 +261,7 @@ export function SettingsScreen() {
             <div className="text-[10px] text-[var(--muted)] uppercase">
               invalid sigs dropped
             </div>
-            <div className="mt-1 text-base font-bold text-[var(--accent-coral)]">
+            <div className="mt-1 text-base font-bold text-[var(--sos-ink)]">
               {metrics.packetsDroppedInvalidSig}
             </div>
           </div>
@@ -239,13 +272,13 @@ export function SettingsScreen() {
       <div className="nova-card p-5">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
-            <Award className="h-5 w-5 text-[var(--accent-blue)]" />
+            <Award className="h-5 w-5 text-[var(--verified-ink)]" />
             <h2 className="font-grotesk text-lg font-bold text-[var(--fg)] lowercase">
               02. verified responder certificate ({sanketContent.demoAuthorityBadge})
             </h2>
           </div>
           {myResponderCert ? (
-            <span className="rounded-full bg-[var(--accent-green)] px-3 py-1 font-mono text-xs font-bold text-[#0B0B0B]">
+            <span className="rounded-full bg-[var(--accent-green)] px-3 py-1 font-mono text-xs font-bold text-[var(--on-fill)]">
               ✔ ENROLLED: {myResponderCert.role}
             </span>
           ) : (
@@ -271,7 +304,7 @@ export function SettingsScreen() {
                 'Enrolled with DEMO AUTHORITY Responder Certificate (NDRF_MEDIC). Sealed precise SOS coordinates are now unlocked.'
               );
             }}
-            className="min-h-[42px] cursor-pointer rounded-full bg-[var(--accent-green)] px-4 py-2 font-mono text-xs font-bold text-[#0B0B0B] uppercase"
+            className="min-h-[42px] cursor-pointer rounded-full bg-[var(--accent-green)] px-4 py-2 font-mono text-xs font-bold text-[var(--on-fill)] uppercase"
           >
             enroll as verified ndrf medic ✔
           </button>
@@ -289,7 +322,7 @@ export function SettingsScreen() {
                 clearResponderCert();
                 setCertFeedback('Reverted to Standard Civilian Node.');
               }}
-              className="min-h-[42px] cursor-pointer rounded-full border border-[var(--accent-coral)] px-4 py-2 font-mono text-xs font-bold text-[var(--accent-coral)] uppercase"
+              className="min-h-[42px] cursor-pointer rounded-full border border-[var(--accent-coral)] px-4 py-2 font-mono text-xs font-bold text-[var(--sos-ink)] uppercase"
             >
               revoke responder cert
             </button>
@@ -312,7 +345,7 @@ export function SettingsScreen() {
           </button>
         </form>
         {certFeedback && (
-          <div className="mt-2 font-mono text-xs text-[var(--accent-blue)]">
+          <div className="mt-2 font-mono text-xs text-[var(--verified-ink)]">
             {certFeedback}
           </div>
         )}
@@ -324,12 +357,12 @@ export function SettingsScreen() {
           <div>
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-2">
-                <Globe className="h-5 w-5 text-[var(--accent-blue)]" />
+                <Globe className="h-5 w-5 text-[var(--verified-ink)]" />
                 <h2 className="font-grotesk text-base font-bold text-[var(--fg)] lowercase">
                   gateway “setu” bridge
                 </h2>
               </div>
-              <span className="rounded bg-[var(--surface-2)] px-2 py-0.5 font-mono text-[10px] font-bold text-[var(--accent-blue)] uppercase">
+              <span className="rounded bg-[var(--surface-2)] px-2 py-0.5 font-mono text-[10px] font-bold text-[var(--verified-ink)] uppercase">
                 {sanketContent.demoGatewayBadge}
               </span>
             </div>
@@ -366,12 +399,12 @@ export function SettingsScreen() {
           <div>
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-2">
-                <Compass className="h-5 w-5 text-[var(--accent-coral)]" />
+                <Compass className="h-5 w-5 text-[var(--sos-ink)]" />
                 <h2 className="font-grotesk text-base font-bold text-[var(--fg)] lowercase">
                   rescuer locate (last 20m)
                 </h2>
               </div>
-              <span className="rounded bg-[var(--accent-coral)]/15 px-2 py-0.5 font-mono text-[10px] font-bold text-[var(--accent-coral)] uppercase">
+              <span className="rounded bg-[var(--accent-coral)]/15 px-2 py-0.5 font-mono text-[10px] font-bold text-[var(--sos-ink)] uppercase">
                 {sanketContent.experimentalBadge}
               </span>
             </div>
@@ -412,7 +445,7 @@ export function SettingsScreen() {
       {/* 4. Offline QR Scan-to-Trust & Key Fingerprint (§5) */}
       <div className="nova-card p-5">
         <div className="mb-3 flex items-center gap-2">
-          <QrCode className="h-5 w-5 text-[var(--accent-blue)]" />
+          <QrCode className="h-5 w-5 text-[var(--verified-ink)]" />
           <h2 className="font-grotesk text-lg font-bold text-[var(--fg)] lowercase">
             03. offline qr scan-to-trust & key verification
           </h2>
@@ -436,13 +469,13 @@ export function SettingsScreen() {
                       y={rIdx}
                       width={1}
                       height={1}
-                      fill="#0B0B0B"
+                      fill="var(--on-fill)"
                     />
                   ) : null
                 )
               )}
             </svg>
-            <span className="mt-2 font-mono text-[10px] font-bold text-[#0B0B0B]">
+            <span className="mt-2 font-mono text-[10px] font-bold text-[var(--on-fill)]">
               NODE #{identity.nodeId}
             </span>
           </div>
@@ -485,7 +518,7 @@ export function SettingsScreen() {
                 </button>
               </div>
               {qrScanFeedback && (
-                <div className="font-mono text-xs text-[var(--accent-blue)]">
+                <div className="font-mono text-xs text-[var(--verified-ink)]">
                   {qrScanFeedback}
                 </div>
               )}
@@ -498,13 +531,13 @@ export function SettingsScreen() {
       <form onSubmit={handleSaveProfile} className="nova-card space-y-4 p-5">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <KeyRound className="h-5 w-5 text-[var(--accent-lilac)]" />
+            <KeyRound className="h-5 w-5 text-[var(--relay-ink)]" />
             <h2 className="font-grotesk text-lg font-bold text-[var(--fg)] lowercase">
               04. identity, safe-circle key & optional featherless ai
             </h2>
           </div>
           {savedNotice && (
-            <span className="inline-flex items-center gap-1 rounded-full bg-[var(--accent-green)] px-3 py-1 font-mono text-xs font-bold text-[#0B0B0B]">
+            <span className="inline-flex items-center gap-1 rounded-full bg-[var(--accent-green)] px-3 py-1 font-mono text-xs font-bold text-[var(--on-fill)]">
               <CheckCircle2 className="h-3.5 w-3.5" />
               <span>saved</span>
             </span>
@@ -604,7 +637,7 @@ export function SettingsScreen() {
 
           <button
             type="submit"
-            className="min-h-[48px] cursor-pointer rounded-full bg-[var(--accent-green)] px-6 py-2.5 font-grotesk text-sm font-bold text-[#0B0B0B]"
+            className="min-h-[48px] cursor-pointer rounded-full bg-[var(--accent-green)] px-6 py-2.5 font-grotesk text-sm font-bold text-[var(--on-fill)]"
           >
             save configuration
           </button>
@@ -615,7 +648,7 @@ export function SettingsScreen() {
       <div className="nova-card p-5">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
-            <Radio className="h-5 w-5 text-[var(--accent-coral)]" />
+            <Radio className="h-5 w-5 text-[var(--sos-ink)]" />
             <h2 className="font-grotesk text-lg font-bold text-[var(--fg)] lowercase">
               05. persistent store-and-forward outbox ({outbox.length} packets)
             </h2>
@@ -624,7 +657,7 @@ export function SettingsScreen() {
           <button
             type="button"
             onClick={() => void clearAllLocalData()}
-            className="flex min-h-[44px] cursor-pointer items-center gap-1.5 rounded-full border border-[var(--accent-coral)] px-4 py-1.5 font-mono text-xs font-bold text-[var(--accent-coral)] uppercase hover:bg-[var(--accent-coral)] hover:text-white"
+            className="flex min-h-[44px] cursor-pointer items-center gap-1.5 rounded-full border border-[var(--accent-coral)] px-4 py-1.5 font-mono text-xs font-bold text-[var(--sos-ink)] uppercase hover:bg-[var(--accent-coral)] hover:text-white"
           >
             <Trash2 className="h-3.5 w-3.5" />
             <span>reset & regenerate identity</span>

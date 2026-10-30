@@ -124,7 +124,7 @@ export function MeshMapScreen({ onNavigate }: MeshMapScreenProps) {
                 <span className="h-2.5 w-2.5 rounded-full bg-[var(--accent-lilac)]" />
                 <span>Multi-Hop Relay (2–3 hops)</span>
               </span>
-              <span className="flex items-center gap-1.5 font-bold text-[var(--accent-coral)]">
+              <span className="flex items-center gap-1.5 font-bold text-[var(--sos-ink)]">
                 <span className="h-2.5 w-2.5 rounded-full border-2 border-dashed border-[var(--accent-coral)]" />
                 <span>Dead-Zone Risk (≤1 Active Link)</span>
               </span>
@@ -132,7 +132,7 @@ export function MeshMapScreen({ onNavigate }: MeshMapScreenProps) {
             <button
               type="button"
               onClick={() => onNavigate('simulator')}
-              className="cursor-pointer font-bold text-[var(--accent-blue)] underline"
+              className="cursor-pointer font-bold text-[var(--verified-ink)] underline"
             >
               Drag nodes or break links in Simulator →
             </button>
@@ -168,9 +168,9 @@ export function MeshMapScreen({ onNavigate }: MeshMapScreenProps) {
                       y2={nB.y}
                       stroke={
                         link.active
-                          ? '#2D5BFF'
+                          ? 'var(--verified)'
                           : link.manuallyBlocked
-                            ? '#FF6A4D'
+                            ? 'var(--sos)'
                             : 'rgba(120,120,120,0.28)'
                       }
                       strokeWidth={link.active ? 3 : 2}
@@ -192,7 +192,7 @@ export function MeshMapScreen({ onNavigate }: MeshMapScreenProps) {
                       fontSize="11"
                       fontFamily="monospace"
                       fontWeight="bold"
-                      fill={link.active ? 'var(--fg)' : '#FF6A4D'}
+                      fill={link.active ? 'var(--fg)' : 'var(--sos)'}
                     >
                       {link.active
                         ? `${link.linkQuality}% · ${link.rssi}dBm`
@@ -219,8 +219,8 @@ export function MeshMapScreen({ onNavigate }: MeshMapScreenProps) {
                       width={184}
                       height={34}
                       rx={10}
-                      fill="#FF6A4D"
-                      stroke="#0B0B0B"
+                      fill="var(--sos)"
+                      stroke="var(--fg)"
                       strokeWidth={1.5}
                     />
                     <text
@@ -230,7 +230,7 @@ export function MeshMapScreen({ onNavigate }: MeshMapScreenProps) {
                       fontSize="10"
                       fontFamily="monospace"
                       fontWeight="bold"
-                      fill="#FFFFFF"
+                      fill="var(--on-sos)"
                     >
                       ⚠ HAZARD: {hz.category.toUpperCase()} ({hz.hops}H)
                     </text>
@@ -247,12 +247,12 @@ export function MeshMapScreen({ onNavigate }: MeshMapScreenProps) {
                 const isDeadZoneRisk = node.online && activeDeg <= 1;
 
                 const fillColor = !node.online
-                  ? '#6B6B66'
+                  ? 'var(--fg-secondary)'
                   : isMe
-                    ? '#C6FF3D'
+                    ? 'var(--lime)'
                     : hops === 1
-                      ? '#2D5BFF'
-                      : '#B79CFF';
+                      ? 'var(--verified)'
+                      : 'var(--relay)';
 
                 return (
                   <g
@@ -271,7 +271,7 @@ export function MeshMapScreen({ onNavigate }: MeshMapScreenProps) {
                       <circle
                         r={56}
                         fill="none"
-                        stroke="#FF6A4D"
+                        stroke="var(--sos)"
                         strokeWidth={2.5}
                         strokeDasharray="6 5"
                       />
@@ -286,7 +286,7 @@ export function MeshMapScreen({ onNavigate }: MeshMapScreenProps) {
                     <circle
                       r={24}
                       fill={fillColor}
-                      stroke="#0B0B0B"
+                      stroke="var(--fg)"
                       strokeWidth={2}
                     />
                     <text
@@ -295,7 +295,7 @@ export function MeshMapScreen({ onNavigate }: MeshMapScreenProps) {
                       fontSize="11"
                       fontFamily="monospace"
                       fontWeight="bold"
-                      fill={isMe || hops > 1 ? '#0B0B0B' : '#FFFFFF'}
+                      fill={isMe || hops > 1 ? 'var(--on-fill)' : 'var(--on-sos)'}
                     >
                       {isMe ? 'YOU' : `${hops}H`}
                     </text>
@@ -326,7 +326,7 @@ export function MeshMapScreen({ onNavigate }: MeshMapScreenProps) {
                           width={136}
                           height={20}
                           rx={10}
-                          fill="#FF6A4D"
+                          fill="var(--sos)"
                         />
                         <text
                           y={2}
@@ -334,7 +334,7 @@ export function MeshMapScreen({ onNavigate }: MeshMapScreenProps) {
                           fontSize="9"
                           fontFamily="monospace"
                           fontWeight="bold"
-                          fill="#FFFFFF"
+                          fill="var(--on-sos)"
                         >
                           DEAD-ZONE RISK ({activeDeg} LINK)
                         </text>
@@ -349,7 +349,7 @@ export function MeshMapScreen({ onNavigate }: MeshMapScreenProps) {
           {/* Recent Wire Transmissions Ticker */}
           <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[var(--line)] bg-[var(--surface-2)] px-3.5 py-2 font-mono text-xs">
             <div className="flex items-center gap-2">
-              <Activity className="h-4 w-4 text-[var(--accent-blue)]" />
+              <Activity className="h-4 w-4 text-[var(--verified-ink)]" />
               <span className="font-bold text-[var(--fg)]">
                 Recent Radio Hop Events:
               </span>
@@ -381,7 +381,7 @@ export function MeshMapScreen({ onNavigate }: MeshMapScreenProps) {
                 <div className="flex items-start justify-between gap-2">
                   <div>
                     <div className="flex items-center gap-1.5">
-                      <Radio className="h-4 w-4 text-[var(--accent-blue)]" />
+                      <Radio className="h-4 w-4 text-[var(--verified-ink)]" />
                       <h2 className="font-grotesk text-base font-bold text-[var(--fg)]">
                         {peer.displayName}
                       </h2>
@@ -395,8 +395,8 @@ export function MeshMapScreen({ onNavigate }: MeshMapScreenProps) {
                     <span
                       className={`rounded-full px-3 py-1 font-mono text-xs font-bold ${
                         peer.isDirectNeighbor
-                          ? 'bg-[var(--accent-green)] text-[#0B0B0B]'
-                          : 'bg-[var(--accent-lilac)] text-[#0B0B0B]'
+                          ? 'bg-[var(--accent-green)] text-[var(--on-fill)]'
+                          : 'bg-[var(--accent-lilac)] text-[var(--on-fill)]'
                       }`}
                     >
                       {peer.hopsAway} {peer.hopsAway === 1 ? 'HOP' : 'HOPS'}
@@ -412,7 +412,7 @@ export function MeshMapScreen({ onNavigate }: MeshMapScreenProps) {
 
                 <div className="mt-4 flex items-center justify-between border-t border-[var(--line)] pt-3">
                   <div className="flex items-center gap-2 font-mono text-xs text-[var(--muted)]">
-                    <ShieldCheck className="h-4 w-4 text-[var(--accent-blue)]" />
+                    <ShieldCheck className="h-4 w-4 text-[var(--verified-ink)]" />
                     <span>
                       Link {peer.linkQuality}% · {peer.rssi} dBm
                     </span>

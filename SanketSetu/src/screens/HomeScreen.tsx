@@ -23,7 +23,7 @@ import {
 import { AppScreenId, sanketContent } from '../content';
 import { useMeshStore } from '../store/useMeshStore';
 import { MeshOrbStage, OrbMeshState } from '../scenes/MeshOrbStage';
-import { ThemeMode } from '../lib/scroll';
+import { ThemeMode } from '../ui/theme';
 import { soundEngine } from '../lib/audio';
 
 interface HomeScreenProps {
@@ -131,7 +131,7 @@ export function HomeScreen({
             <span className="type-mono-label text-[var(--muted)]">
               {sanketContent.home.kicker}
             </span>
-            <span className="rounded-full bg-[var(--accent-lilac)] px-2.5 py-0.5 font-mono text-[10px] font-bold text-[#0B0B0B]">
+            <span className="rounded-full bg-[var(--accent-lilac)] px-2.5 py-0.5 font-mono text-[10px] font-bold text-[var(--on-fill)]">
               {sanketContent.home.orbStates[orbState]}
             </span>
           </div>
@@ -160,7 +160,7 @@ export function HomeScreen({
               <div className="mt-1 font-grotesk text-2xl font-bold tabular-nums text-[var(--fg)]">
                 {peers.length}
               </div>
-              <div className="font-mono text-[11px] text-[var(--accent-blue)]">
+              <div className="font-mono text-[11px] text-[var(--verified-ink)]">
                 {directPeers.length} direct ·{' '}
                 {Math.max(0, peers.length - directPeers.length)} multi-hop
               </div>
@@ -190,7 +190,7 @@ export function HomeScreen({
                     .length
                 }
               </div>
-              <div className="font-mono text-[11px] text-[var(--accent-blue)]">
+              <div className="font-mono text-[11px] text-[var(--verified-ink)]">
                 ed25519 verified acks
               </div>
             </div>
@@ -237,7 +237,7 @@ export function HomeScreen({
               >
                 {/* Hold Progress Fill */}
                 <div
-                  className="pointer-events-none absolute inset-y-0 left-0 bg-[#0B0B0B]/30 transition-none"
+                  className="pointer-events-none absolute inset-y-0 left-0 bg-[var(--on-fill)]/30 transition-none"
                   style={{ width: `${holdProgress}%` }}
                 />
                 <div className="relative z-10 flex items-center gap-2.5">
@@ -253,7 +253,7 @@ export function HomeScreen({
               </button>
             ) : (
               <div className="flex w-full flex-col gap-2 rounded-3xl border-2 border-[var(--accent-coral)] bg-[var(--accent-coral)]/12 p-4 text-center">
-                <div className="font-grotesk text-sm font-bold text-[var(--accent-coral)] uppercase">
+                <div className="font-grotesk text-sm font-bold text-[var(--sos-ink)] uppercase">
                   {sanketContent.home.sosActivePrompt}
                 </div>
                 <div className="flex items-center justify-center gap-2">
@@ -280,7 +280,7 @@ export function HomeScreen({
             <button
               type="button"
               onClick={() => void handleQuickSafe()}
-              className="flex min-h-[48px] w-full cursor-pointer items-center justify-center gap-2 rounded-full bg-[var(--accent-green)] px-5 py-2.5 font-grotesk text-xs font-bold text-[#0B0B0B] shadow-xs transition-transform active:scale-[0.99]"
+              className="flex min-h-[48px] w-full cursor-pointer items-center justify-center gap-2 rounded-full bg-[var(--accent-green)] px-5 py-2.5 font-grotesk text-xs font-bold text-[var(--on-fill)] shadow-xs transition-transform active:scale-[0.99]"
             >
               <CheckCircle2 className="h-4 w-4" />
               <span>
@@ -306,7 +306,7 @@ export function HomeScreen({
                 onClick={() => onNavigate('circles')}
                 className="flex min-h-[46px] cursor-pointer items-center justify-center gap-1 rounded-full border border-[var(--line)] bg-[var(--surface)] px-3 py-2 font-grotesk text-xs font-bold text-[var(--fg)] hover:bg-[var(--surface-2)]"
               >
-                <HeartHandshake className="h-3.5 w-3.5 text-[var(--accent-blue)]" />
+                <HeartHandshake className="h-3.5 w-3.5 text-[var(--verified-ink)]" />
                 <span>circles</span>
               </button>
 
@@ -315,7 +315,7 @@ export function HomeScreen({
                 onClick={() => onNavigate('simulator')}
                 className="flex min-h-[46px] cursor-pointer items-center justify-center gap-1 rounded-full border border-[var(--line)] bg-[var(--surface)] px-3 py-2 font-grotesk text-xs font-bold text-[var(--fg)] hover:bg-[var(--surface-2)]"
               >
-                <Cpu className="h-3.5 w-3.5 text-[var(--accent-lilac)]" />
+                <Cpu className="h-3.5 w-3.5 text-[var(--relay-ink)]" />
                 <span>simulator</span>
               </button>
             </div>
@@ -326,7 +326,7 @@ export function HomeScreen({
       {/* Setu Online Gateway Bridge Strip (§9.6 — DEMO) */}
       <div className="nova-card flex flex-wrap items-center justify-between gap-3 px-4 py-3">
         <div className="flex items-center gap-2.5">
-          <Globe className="h-4 w-4 text-[var(--accent-blue)]" />
+          <Globe className="h-4 w-4 text-[var(--verified-ink)]" />
           <div>
             <div className="font-grotesk text-xs font-bold text-[var(--fg)]">
               Setu Online Gateway Bridge ({sanketContent.demoGatewayBadge})
@@ -357,7 +357,7 @@ export function HomeScreen({
             <button
               type="button"
               onClick={() => onNavigate('map')}
-              className="flex cursor-pointer items-center gap-1 font-mono text-xs font-bold text-[var(--accent-blue)]"
+              className="flex cursor-pointer items-center gap-1 font-mono text-xs font-bold text-[var(--verified-ink)]"
             >
               <span>open 3d/2d map</span>
               <ArrowUpRight className="h-3.5 w-3.5" />
@@ -374,8 +374,8 @@ export function HomeScreen({
                   <Radio
                     className={`h-3.5 w-3.5 ${
                       peer.isDirectNeighbor
-                        ? 'text-[var(--accent-blue)]'
-                        : 'text-[var(--accent-lilac)]'
+                        ? 'text-[var(--verified-ink)]'
+                        : 'text-[var(--relay-ink)]'
                     }`}
                   />
                   <div>
@@ -392,15 +392,15 @@ export function HomeScreen({
                   <span
                     className={`rounded-full px-2.5 py-0.5 font-mono text-[10px] font-bold ${
                       peer.isDirectNeighbor
-                        ? 'bg-[var(--accent-green)] text-[#0B0B0B]'
-                        : 'bg-[var(--accent-lilac)] text-[#0B0B0B]'
+                        ? 'bg-[var(--accent-green)] text-[var(--on-fill)]'
+                        : 'bg-[var(--accent-lilac)] text-[var(--on-fill)]'
                     }`}
                   >
                     {peer.hopsAway} {peer.hopsAway === 1 ? 'HOP' : 'HOPS'}
                   </span>
                   {peer.trustStatus === 'verified' && (
                     <ShieldCheck
-                      className="h-4 w-4 text-[var(--accent-blue)]"
+                      className="h-4 w-4 text-[var(--verified-ink)]"
                       aria-label="Verified via QR / TOFU"
                     />
                   )}
@@ -418,7 +418,7 @@ export function HomeScreen({
             <button
               type="button"
               onClick={() => onNavigate('alerts')}
-              className="flex cursor-pointer items-center gap-1 font-mono text-xs font-bold text-[var(--accent-coral)]"
+              className="flex cursor-pointer items-center gap-1 font-mono text-xs font-bold text-[var(--sos-ink)]"
             >
               <span>open alerts feed</span>
               <ArrowUpRight className="h-3.5 w-3.5" />

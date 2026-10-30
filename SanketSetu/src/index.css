@@ -1,112 +1,5 @@
 @import "tailwindcss";
-
-:root {
-  /* Light Theme (Primary Default) — Mirrored to Three.js 3D Materials & Canvas */
-  --bg: #F6F4EF;
-  --bg-inverse: #0B0B0B;
-  --fg: #0B0B0B;
-  --muted: #6B6B66;
-  --line: rgba(0, 0, 0, 0.08);
-  --grid-line: rgba(0, 0, 0, 0.06);
-
-  /* Surface tokens */
-  --surface: #FFFFFF;
-  --surface-2: #EFECE5;
-  --surface-solid: #FFFFFF;
-  --surface-elevated: #EFECE5;
-  --bg-elevated: #FFFFFF;
-  --outline-fill: #F6F4EF;
-
-  /* Spacing Scale (4, 8, 12, 16, 24, 32, 48, 72, 112px) */
-  --sp-4: 4px;
-  --sp-8: 8px;
-  --sp-12: 12px;
-  --sp-16: 16px;
-  --sp-24: 24px;
-  --sp-32: 32px;
-  --sp-48: 48px;
-  --sp-72: 72px;
-  --sp-112: 112px;
-  --gutter: clamp(16px, 5vw, 80px);
-
-  /* Radius Scale (8, 14, 20, 28, pill) */
-  --r-8: 8px;
-  --r-14: 14px;
-  --r-20: 20px;
-  --r-28: 28px;
-  --r-pill: 9999px;
-
-  /* Shadow Scale (3 levels) */
-  --shadow-1: 0 2px 10px rgba(0, 0, 0, 0.04);
-  --shadow-2: 0 12px 32px rgba(0, 0, 0, 0.07);
-  --shadow-3: 0 24px 64px rgba(0, 0, 0, 0.10);
-
-  /* Layout & Z-Index Contract Tokens */
-  --nav-h: clamp(60px, 7.5svh, 76px);
-  --hud-safe: clamp(56px, 7.5svh, 76px);
-  --z-canvas: 0;
-  --z-grid: 1;
-  --z-section: 10;
-  --z-header: 20;
-  --z-hud: 40;
-  --z-nav: 50;
-  --z-modal: 60;
-
-  /* Saturated Accent Palette */
-  --accent: #C6FF3D;
-  --accent-2: #B79CFF;
-  --accent-3: #2D5BFF;
-  --accent-4: #FF6A4D;
-  --accent-5: #FFB58C;
-
-  /* Semantic Aliases for 3D & UI Consistency */
-  --border: var(--line);
-  --accent-green: var(--accent);
-  --accent-lilac: var(--accent-2);
-  --accent-blue: var(--accent-3);
-  --accent-coral: var(--accent-4);
-  --accent-peach: var(--accent-5);
-
-  /* Variable Grotesk (weight + width axes) & Editorial Serif */
-  --font-display: 'Bricolage Grotesque', 'Archivo', -apple-system, BlinkMacSystemFont, sans-serif;
-  --font-body: var(--font-display);
-  --font-sans: var(--font-display);
-  --font-serif: 'Instrument Serif', Georgia, serif;
-}
-
-[data-theme="dark"] {
-  /* Secondary Optional Dark Theme */
-  --bg: #0A0A0A;
-  --bg-inverse: #F6F4EF;
-  --fg: #F5F5F3;
-  --muted: #9A9A94;
-  --line: rgba(245, 245, 243, 0.12);
-  --grid-line: rgba(245, 245, 243, 0.04);
-
-  --surface: #141418;
-  --surface-2: #1C1C22;
-  --surface-solid: #141418;
-  --surface-elevated: #1C1C22;
-  --bg-elevated: #141418;
-  --outline-fill: #0A0A0A;
-
-  --shadow-1: 0 2px 12px rgba(0, 0, 0, 0.35);
-  --shadow-2: 0 12px 34px rgba(0, 0, 0, 0.50);
-  --shadow-3: 0 24px 64px rgba(0, 0, 0, 0.65);
-
-  --accent: #B8FF2C;
-  --accent-2: #C8A2FF;
-  --accent-3: #4D7CFF;
-  --accent-4: #FF5C4D;
-  --accent-5: #FFAD80;
-
-  --border: var(--line);
-  --accent-green: var(--accent);
-  --accent-lilac: var(--accent-2);
-  --accent-blue: var(--accent-3);
-  --accent-coral: var(--accent-4);
-  --accent-peach: var(--accent-5);
-}
+@import "./ui/tokens.css";
 
 @layer base {
   * {
@@ -114,289 +7,111 @@
     border-color: var(--line);
   }
 
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+
   html,
   body {
-    background-color: var(--bg);
-    color: var(--fg);
-    font-family: var(--font-display);
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
-    text-rendering: optimizeLegibility;
-    overflow-x: hidden;
     margin: 0;
     padding: 0;
-    transition: background-color 0.35s cubic-bezier(0.16, 1, 0.3, 1),
-      color 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+    background-color: var(--bg);
+    color: var(--fg);
+    font-family: var(--font-ui);
+    font-size: 16px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    overflow-x: hidden;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
   }
 
   ::selection {
-    background-color: var(--accent);
-    color: #0B0B0B;
+    background-color: var(--verified-tint);
+    color: var(--fg);
+  }
+
+  code,
+  kbd,
+  samp {
+    font-family: var(--font-mono);
   }
 }
 
-/* Shared Section Layout Contract (every section) */
-.nova-section-shell {
-  position: relative;
-  z-index: var(--z-section);
-  width: 100%;
-  display: grid;
-  grid-template-rows: [header] auto [body] minmax(0, 1fr);
-  row-gap: clamp(10px, 1.8svh, 24px);
-  padding-top: calc(var(--nav-h) + clamp(10px, 2svh, 24px));
-  padding-inline: var(--gutter);
-  padding-bottom: calc(var(--hud-safe) + clamp(10px, 2.2svh, 28px));
-}
+/* --- Shared surface & type classes (kept by name; restyled for a calm safety-tool look) --- */
 
-.nova-section-shell[data-pinned="true"] {
-  height: 100svh;
-  max-height: 100svh;
-  overflow: hidden;
-}
-
-.nova-section-shell[data-pinned="false"] {
-  min-height: 100svh;
-}
-
-.nova-section-header {
-  grid-row: header;
-  position: relative;
-  z-index: var(--z-header);
-  min-width: 0;
-  width: 100%;
-  max-width: 78rem;
-  margin-inline: auto;
-}
-
-.nova-section-body {
-  grid-row: body;
-  position: relative;
-  z-index: var(--z-section);
-  min-height: 0;
-  min-width: 0;
-  width: 100%;
-  max-width: 78rem;
-  margin-inline: auto;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-}
-
-/* Unified 6-Step Type Scale */
-.type-display {
-  font-family: var(--font-display);
-  font-size: clamp(2.4rem, 5.6vw, 5.4rem);
-  line-height: 0.92;
-  letter-spacing: -0.04em;
-  font-weight: 650;
-}
-
-.type-h1 {
-  font-family: var(--font-display);
-  font-size: clamp(2.05rem, 4.4vw, 4.2rem);
-  line-height: 0.94;
-  letter-spacing: -0.04em;
-  font-weight: 620;
-}
-
-.type-h2 {
-  font-family: var(--font-display);
-  font-size: clamp(1.25rem, 2vw, 1.75rem);
-  line-height: 1.15;
-  letter-spacing: -0.03em;
-  font-weight: 600;
-}
-
-.type-body {
-  font-family: var(--font-body);
-  font-size: clamp(0.95rem, 1.1vw, 1.125rem);
-  line-height: 1.55;
-  letter-spacing: -0.01em;
-}
-
-.type-small {
-  font-family: var(--font-body);
-  font-size: clamp(0.8125rem, 0.92vw, 0.9375rem);
-  line-height: 1.45;
-}
-
-.type-mono-label {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 11px;
-  line-height: 1.2;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  font-weight: 600;
-}
-
-/* Shared Surface Card Contract */
 .nova-card {
   background-color: var(--surface);
   border: 1px solid var(--line);
-  border-radius: var(--r-20);
+  border-radius: var(--radius);
   box-shadow: var(--shadow-1);
-  transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1),
-    box-shadow 0.28s cubic-bezier(0.16, 1, 0.3, 1),
-    border-color 0.28s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.nova-card-interactive:hover {
-  transform: translateY(-3px);
-  box-shadow: var(--shadow-2);
-  border-color: rgba(11, 11, 11, 0.22);
+.type-display {
+  font-size: 2rem;
+  line-height: 1.25;
+  font-weight: 700;
 }
 
-[data-theme="dark"] .nova-card-interactive:hover {
-  border-color: rgba(245, 245, 243, 0.28);
+.type-h1 {
+  font-size: 1.75rem;
+  line-height: 1.3;
+  font-weight: 700;
 }
 
-/* Lenis smooth scroll base */
-html.lenis,
-html.lenis body {
-  height: auto;
+.type-h2 {
+  font-size: 1.375rem;
+  line-height: 1.35;
+  font-weight: 650;
 }
 
-.lenis.lenis-smooth {
-  scroll-behavior: auto !important;
+.type-body {
+  font-size: 1rem;
+  line-height: 1.5;
 }
 
-.lenis.lenis-stopped {
-  overflow: hidden;
+.type-mono-label {
+  font-size: 0.75rem;
+  line-height: 1.4;
+  letter-spacing: 0.02em;
+  font-weight: 600;
 }
 
-/* Faint 1px Grid Overlay (rgba(0,0,0,0.06) on light, rgba(245,245,243,0.04) on dark) */
-.bg-subtle-grid {
-  background-size: 64px 64px;
-  background-image:
-    linear-gradient(to right, var(--grid-line) 1px, transparent 1px),
-    linear-gradient(to bottom, var(--grid-line) 1px, transparent 1px);
-}
-
-/* Variable Grotesk & Editorial Serif Helpers */
 .font-grotesk {
-  font-family: var(--font-display);
-  letter-spacing: -0.04em;
-  font-variation-settings: 'wght' 540, 'wdth' 92;
+  font-family: var(--font-ui);
 }
 
-.font-serif-editorial {
-  font-family: var(--font-serif);
-  letter-spacing: -0.01em;
+/* Former editorial treatments — neutralised to plain text so nothing relies on outline/serif. */
+.font-serif-editorial,
+.text-treatment-outline {
+  font-family: var(--font-ui);
+  font-style: normal;
+  color: var(--fg);
+  -webkit-text-stroke: 0;
 }
 
-/* Responsive Display Statements scaled for 100svh safety */
-.text-statement-lg {
-  font-size: clamp(2.05rem, 4.4vw, 4.2rem);
-  line-height: 0.94;
-  letter-spacing: -0.04em;
-}
-
-.text-statement-compact {
-  font-size: clamp(1.75rem, 3.5vw, 3.25rem);
-  line-height: 0.94;
-  letter-spacing: -0.04em;
-}
-
-.text-statement-xl {
-  font-size: clamp(2.4rem, 5.6vw, 5.4rem);
-  line-height: 0.92;
-  letter-spacing: -0.04em;
-}
-
-.text-caption-serif {
-  font-family: var(--font-serif);
-  font-size: clamp(1.35rem, 2.2vw, 2.15rem);
-  line-height: 1.12;
-}
-
-.text-stat-giant {
-  font-size: clamp(2.6rem, 5.4vw, 5.2rem);
-  line-height: 0.92;
-  letter-spacing: -0.04em;
+.tabular-nums {
   font-variant-numeric: tabular-nums;
 }
 
-/* Mixed Headline Treatments — Opaque interior fill + high-contrast chrome so text is never unreadable over glass or grid lines */
-.text-treatment-solid,
-.text-treatment-solid .split-char {
-  color: var(--fg);
-  -webkit-text-fill-color: var(--fg);
-}
-
-.text-treatment-outline,
-.text-treatment-outline .split-char {
-  color: var(--fg);
-  -webkit-text-stroke: 2.2px var(--fg);
-  -webkit-text-fill-color: var(--outline-fill);
-  paint-order: stroke fill;
-}
-
-@keyframes chrome-band-shift {
-  0% {
-    background-position: 0% 50%;
+/* The only looping animation in the app: a small pulse on the active-SOS indicator. */
+@keyframes sos-pulse {
+  0%,
+  100% {
+    opacity: 1;
   }
   50% {
-    background-position: 100% 50%;
-  }
-  100% {
-    background-position: 0% 50%;
+    opacity: 0.35;
   }
 }
 
-.text-treatment-chrome,
-.text-treatment-chrome .split-char {
-  background-image: linear-gradient(
-    112deg,
-    #0B0B0B 0%,
-    #1E293B 22%,
-    #2D5BFF 48%,
-    #5B21B6 74%,
-    #0B0B0B 100%
-  );
-  background-size: 220% 100%;
-  animation: chrome-band-shift 6.5s ease-in-out infinite;
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
-  color: var(--fg);
-}
-
-[data-theme="dark"] .text-treatment-chrome,
-[data-theme="dark"] .text-treatment-chrome .split-char {
-  background-image: linear-gradient(
-    112deg,
-    #F6F4EF 0%,
-    #C6FF3D 30%,
-    #B79CFF 68%,
-    #F6F4EF 100%
-  );
-  background-size: 220% 100%;
-  animation: chrome-band-shift 6.5s ease-in-out infinite;
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
-  color: #F6F4EF;
-}
-
-/* SplitText character interactive styling */
-.split-char {
-  display: inline-block;
-  will-change: transform, font-variation-settings;
-  font-variation-settings: 'wght' 540, 'wdth' 92;
-  cursor: default;
-}
-
-/* Legibility halo over the 3D canvas */
-.orb-overlap-legible {
-  isolation: isolate;
-}
-
-/* SplitText line mask wrapper */
-.split-line-mask {
-  overflow: hidden;
-  display: block;
-  padding-bottom: 0.12em;
-  margin-bottom: -0.12em;
+.sos-pulse {
+  animation: sos-pulse 1.6s ease-in-out infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {

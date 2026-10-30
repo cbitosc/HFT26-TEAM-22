@@ -155,9 +155,9 @@ export function MessageInspectorModal({
                     message.deliveryState === 'DELIVERED'
                       ? 'bg-[var(--accent-blue)] text-white'
                       : message.deliveryState === 'RELAYED'
-                        ? 'bg-[var(--accent-lilac)] text-[#0B0B0B]'
+                        ? 'bg-[var(--accent-lilac)] text-[var(--on-fill)]'
                         : message.deliveryState === 'SENT'
-                          ? 'bg-[var(--accent-green)] text-[#0B0B0B]'
+                          ? 'bg-[var(--accent-green)] text-[var(--on-fill)]'
                           : 'bg-[var(--surface)] text-[var(--muted)]'
                   }`}
                 >
@@ -182,7 +182,7 @@ export function MessageInspectorModal({
                         </span>
                       </div>
                       {idx < message.route.length - 1 && (
-                        <span className="font-mono text-xs font-bold text-[var(--accent-lilac)]">
+                        <span className="font-mono text-xs font-bold text-[var(--relay-ink)]">
                           →
                         </span>
                       )}
@@ -268,9 +268,9 @@ export function MessageInspectorModal({
               <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[var(--line)] bg-[var(--surface-2)] p-4">
                 <div className="flex items-center gap-3">
                   {isSigValid ? (
-                    <ShieldCheck className="h-7 w-7 text-[var(--accent-blue)]" />
+                    <ShieldCheck className="h-7 w-7 text-[var(--verified-ink)]" />
                   ) : (
-                    <ShieldAlert className="h-7 w-7 text-[var(--accent-coral)]" />
+                    <ShieldAlert className="h-7 w-7 text-[var(--sos-ink)]" />
                   )}
                   <div>
                     <div className="font-grotesk text-base font-bold text-[var(--fg)]">
@@ -286,7 +286,7 @@ export function MessageInspectorModal({
                 <button
                   type="button"
                   onClick={handleRunLiveVerify}
-                  className="flex min-h-[44px] cursor-pointer items-center gap-1.5 rounded-full bg-[var(--accent-green)] px-4 py-2 font-mono text-xs font-bold text-[#0B0B0B]"
+                  className="flex min-h-[44px] cursor-pointer items-center gap-1.5 rounded-full bg-[var(--accent-green)] px-4 py-2 font-mono text-xs font-bold text-[var(--on-fill)]"
                 >
                   <CheckCircle2 className="h-4 w-4" />
                   <span>re-verify signature</span>
@@ -330,7 +330,7 @@ export function MessageInspectorModal({
                   <span className="text-[var(--muted)]">
                     Packet Digest (SHA-512/256 hex):
                   </span>
-                  <div className="mt-0.5 break-all text-[var(--accent-blue)]">
+                  <div className="mt-0.5 break-all text-[var(--verified-ink)]">
                     {message.packetHashHex}
                   </div>
                 </div>

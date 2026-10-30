@@ -3,10 +3,10 @@
  * Per §6 & §8.3:
  * - Preserves the exact NOVA glossy iridescent glass Orb + orbiting peer dots (one per connected peer).
  * - Semantic states:
- *   - `idle`: lilac (#B79CFF)
+ *   - `idle`: lilac (var(--relay))
  *   - `scanning`: gentle pulse
  *   - `connected`: orbiting satellite spheres (one per peer) + electric blue / lime rim
- *   - `sos`: high-urgency coral (#FF6A4D)
+ *   - `sos`: high-urgency coral (var(--sos))
  * - Battery efficiency (§6):
  *   - In `saver` mode (<15% battery), `prefers-reduced-motion`, or when off the Home screen,
  *     automatically pauses WebGL and renders a zero-GPU CSS glass orb so battery drain is near zero.
@@ -16,7 +16,7 @@ import React, { Component, useMemo, useRef } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { PeerNode, PowerMode } from '../mesh/types';
-import { ThemeMode } from '../lib/scroll';
+import { ThemeMode } from '../ui/theme';
 
 export type OrbMeshState = 'idle' | 'scanning' | 'connected' | 'sos';
 
@@ -65,22 +65,22 @@ function LiveOrbMesh3D({
   const palette = useMemo(() => {
     if (orbState === 'sos') {
       return {
-        primary: '#FF6A4D',
+        primary: 'var(--sos)',
         emissive: '#FF3B1F',
         rim: '#FFB58C',
       };
     }
     if (orbState === 'connected') {
       return {
-        primary: theme === 'light' ? '#B79CFF' : '#9E7BFF',
-        emissive: '#2D5BFF',
-        rim: '#C6FF3D',
+        primary: theme === 'light' ? 'var(--relay)' : '#9E7BFF',
+        emissive: 'var(--verified)',
+        rim: 'var(--lime)',
       };
     }
     return {
-      primary: '#B79CFF',
+      primary: 'var(--relay)',
       emissive: theme === 'light' ? '#6D4AFF' : '#4C28CC',
-      rim: '#2D5BFF',
+      rim: 'var(--verified)',
     };
   }, [orbState, theme]);
 
@@ -146,10 +146,10 @@ function LiveOrbMesh3D({
           const y = Math.sin(angle * 2) * 0.28;
           const dotColor =
             peer.trustStatus === 'key_changed'
-              ? '#FF6A4D'
+              ? 'var(--sos)'
               : peer.isDirectNeighbor
-                ? '#C6FF3D'
-                : '#2D5BFF';
+                ? 'var(--lime)'
+                : 'var(--verified)';
 
           return (
             <mesh key={peer.nodeId} position={[x, y, z]}>
@@ -181,10 +181,10 @@ function StaticCssOrbFallback({
 }) {
   const gradient =
     orbState === 'sos'
-      ? 'radial-gradient(circle at 32% 28%, #FFFFFF 0%, #FFB58C 22%, #FF6A4D 58%, #3B0D08 100%)'
+      ? 'radial-gradient(circle at 32% 28%, var(--on-sos) 0%, #FFB58C 22%, var(--sos) 58%, #3B0D08 100%)'
       : orbState === 'connected'
-        ? 'radial-gradient(circle at 32% 28%, #FFFFFF 0%, #C6FF3D 24%, #B79CFF 56%, #2D5BFF 92%)'
-        : 'radial-gradient(circle at 32% 28%, #FFFFFF 0%, #B79CFF 34%, #2D5BFF 78%, #0B0B0B 100%)';
+        ? 'radial-gradient(circle at 32% 28%, var(--on-sos) 0%, var(--lime) 24%, var(--relay) 56%, var(--verified) 92%)'
+        : 'radial-gradient(circle at 32% 28%, var(--on-sos) 0%, var(--relay) 34%, var(--verified) 78%, var(--on-fill) 100%)';
 
   return (
     <div
@@ -207,7 +207,7 @@ function StaticCssOrbFallback({
             title={`${peer.displayName} (${peer.hopsAway} hop${peer.hopsAway > 1 ? 's' : ''})`}
           >
             <span
-              className={`block h-3.5 w-3.5 rounded-full border border-[#0B0B0B] shadow-sm ${
+              className={`block h-3.5 w-3.5 rounded-full border border-[var(--on-fill)] shadow-sm ${
                 peer.isDirectNeighbor
                   ? 'bg-[var(--accent-green)]'
                   : 'bg-[var(--accent-blue)]'
@@ -281,7 +281,7 @@ export function MeshOrbStage({
         >
           <ambientLight intensity={theme === 'light' ? 0.85 : 0.55} />
           <directionalLight position={[4, 5, 4]} intensity={1.7} color="#fff7ed" />
-          <pointLight position={[-3, -2, 3]} intensity={1.1} color="#B79CFF" />
+          <pointLight position={[-3, -2, 3]} intensity={1.1} color="var(--relay)" />
           <LiveOrbMesh3D orbState={orbState} peers={peers} theme={theme} />
         </Canvas>
 

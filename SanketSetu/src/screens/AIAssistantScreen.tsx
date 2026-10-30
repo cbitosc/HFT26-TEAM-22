@@ -177,8 +177,8 @@ export function AIAssistantScreen() {
           onClick={() => setForceOfflineTest((v) => !v)}
           className={`flex min-h-[44px] cursor-pointer items-center gap-2 rounded-full border px-4 py-2 font-mono text-xs font-bold uppercase ${
             effectiveOnline
-              ? 'border-[var(--line)] bg-[var(--accent-green)] text-[#0B0B0B]'
-              : 'border-[var(--accent-coral)] bg-[var(--accent-coral)]/15 text-[var(--accent-coral)]'
+              ? 'border-[var(--line)] bg-[var(--accent-green)] text-[var(--on-fill)]'
+              : 'border-[var(--accent-coral)] bg-[var(--accent-coral)]/15 text-[var(--sos-ink)]'
           }`}
         >
           {effectiveOnline ? (
@@ -197,7 +197,7 @@ export function AIAssistantScreen() {
 
       {/* Mandatory Disclaimer Banner (§8.8) */}
       <div className="mb-4 flex items-center gap-2.5 rounded-2xl border border-[var(--line)] bg-[var(--surface-2)] px-4 py-3 font-mono text-xs text-[var(--fg)]">
-        <ShieldAlert className="h-4 w-4 shrink-0 text-[var(--accent-coral)]" />
+        <ShieldAlert className="h-4 w-4 shrink-0 text-[var(--sos-ink)]" />
         <span className="font-bold">{sanketContent.aiDisclaimer}.</span>
         <span className="text-[var(--muted)]">
           Core mesh messaging and SOS work 100% offline without AI.
@@ -247,7 +247,7 @@ export function AIAssistantScreen() {
             onClick={handleOfflineRuleClassify}
             className="flex min-h-[48px] cursor-pointer items-center gap-1.5 rounded-full border border-[var(--line)] bg-[var(--surface-2)] px-4 py-2 font-mono text-xs font-bold text-[var(--fg)] uppercase hover:border-[var(--fg)]"
           >
-            <CheckCircle2 className="h-4 w-4 text-[var(--accent-green)]" />
+            <CheckCircle2 className="h-4 w-4 text-[var(--safe-ink)]" />
             <span>run offline keyword classifier (0ms)</span>
           </button>
 
@@ -275,7 +275,7 @@ export function AIAssistantScreen() {
             type="button"
             disabled={!effectiveOnline || loading}
             onClick={() => void handleRankAlerts()}
-            className="flex min-h-[48px] cursor-pointer items-center gap-1.5 rounded-full bg-[var(--accent-lilac)] px-4 py-2 font-mono text-xs font-bold text-[#0B0B0B] uppercase disabled:cursor-not-allowed disabled:opacity-40"
+            className="flex min-h-[48px] cursor-pointer items-center gap-1.5 rounded-full bg-[var(--accent-lilac)] px-4 py-2 font-mono text-xs font-bold text-[var(--on-fill)] uppercase disabled:cursor-not-allowed disabled:opacity-40"
           >
             <ListOrdered className="h-4 w-4" />
             <span>rank {alerts.length} alerts</span>
@@ -318,7 +318,7 @@ export function AIAssistantScreen() {
                 className={`rounded-full px-3 py-0.5 font-mono text-[10px] font-bold uppercase ${
                   outputSource === 'featherless'
                     ? 'bg-[var(--accent-blue)] text-white'
-                    : 'bg-[var(--accent-lilac)] text-[#0B0B0B]'
+                    : 'bg-[var(--accent-lilac)] text-[var(--on-fill)]'
                 }`}
               >
                 {outputSource === 'featherless'
@@ -340,7 +340,7 @@ export function AIAssistantScreen() {
             )}
 
             <div className="mt-3 flex items-center gap-1.5 border-t border-[var(--line)] pt-2 font-mono text-[11px] text-[var(--muted)]">
-              <AlertCircle className="h-3.5 w-3.5 text-[var(--accent-coral)]" />
+              <AlertCircle className="h-3.5 w-3.5 text-[var(--sos-ink)]" />
               <span>{sanketContent.aiDisclaimer}</span>
             </div>
           </div>

@@ -19,7 +19,7 @@ import {
   VolumeX,
 } from 'lucide-react';
 import { useMeshStore } from '../store/useMeshStore';
-import { ThemeMode } from '../lib/scroll';
+import { ThemeMode } from '../ui/theme';
 import { AppScreenId, sanketContent } from '../content';
 
 interface TopBarProps {
@@ -64,7 +64,7 @@ export function TopBar({
           aria-label="Go to Sanket Home"
         >
           <span
-            className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[#0B0B0B]/15 font-grotesk text-base font-bold text-[#0B0B0B] ${
+            className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[var(--on-fill)]/15 font-grotesk text-base font-bold text-[var(--on-fill)] ${
               activeSosId
                 ? 'bg-[var(--accent-coral)] text-white'
                 : 'bg-[var(--accent-green)]'
@@ -77,7 +77,7 @@ export function TopBar({
               <span className="font-grotesk text-sm font-bold tracking-tight text-[var(--fg)] lowercase">
                 {sanketContent.appName}
               </span>
-              <span className="rounded-full bg-[var(--accent-green)] px-2 py-0.5 font-mono text-[10px] font-bold text-[#0B0B0B]">
+              <span className="rounded-full bg-[var(--accent-green)] px-2 py-0.5 font-mono text-[10px] font-bold text-[var(--on-fill)]">
                 OFFLINE MESH
               </span>
             </div>
@@ -94,14 +94,14 @@ export function TopBar({
             onClick={() => onNavigate('map')}
             className="flex min-h-[40px] cursor-pointer items-center gap-1.5 rounded-full border border-[var(--line)] bg-[var(--surface-2)] px-3 py-1 font-mono text-xs text-[var(--fg)] transition-colors hover:border-[var(--fg)]/30"
           >
-            <Radio className="h-3.5 w-3.5 text-[var(--accent-blue)]" />
+            <Radio className="h-3.5 w-3.5 text-[var(--verified-ink)]" />
             <span>
               {directNeighbors} direct / {totalKnownPeers} mesh peers
             </span>
             <span
               className={`rounded px-1.5 py-0.5 text-[9px] font-semibold ${
                 hasRealRadio
-                  ? 'bg-[var(--accent-green)] text-[#0B0B0B]'
+                  ? 'bg-[var(--accent-green)] text-[var(--on-fill)]'
                   : 'bg-[var(--surface)] text-[var(--muted)]'
               }`}
               title={
@@ -121,12 +121,12 @@ export function TopBar({
             title="Store-and-forward outbox & battery mode"
           >
             {metrics.isCharging ? (
-              <BatteryCharging className="h-3.5 w-3.5 text-[var(--accent-blue)]" />
+              <BatteryCharging className="h-3.5 w-3.5 text-[var(--verified-ink)]" />
             ) : (
               <Battery
                 className={`h-3.5 w-3.5 ${
                   metrics.batteryPct < 15
-                    ? 'text-[var(--accent-coral)]'
+                    ? 'text-[var(--sos-ink)]'
                     : 'text-[var(--fg)]'
                 }`}
               />
@@ -136,7 +136,7 @@ export function TopBar({
               {metrics.scanDutyCyclePct}% scan)
             </span>
             {outbox.length > 0 && (
-              <span className="ml-1 rounded-full bg-[var(--accent-lilac)] px-2 py-0.5 text-[10px] font-bold text-[#0B0B0B]">
+              <span className="ml-1 rounded-full bg-[var(--accent-lilac)] px-2 py-0.5 text-[10px] font-bold text-[var(--on-fill)]">
                 {outbox.length} queued
               </span>
             )}
@@ -183,7 +183,7 @@ export function TopBar({
             {theme === 'light' ? (
               <Moon className="h-4 w-4" />
             ) : (
-              <Sun className="h-4 w-4 text-[var(--accent-green)]" />
+              <Sun className="h-4 w-4 text-[var(--safe-ink)]" />
             )}
           </button>
 

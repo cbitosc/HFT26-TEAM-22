@@ -69,14 +69,14 @@ export function MessagesScreen() {
         );
       case 'RELAYED':
         return (
-          <span className="inline-flex items-center gap-1 rounded-full bg-[var(--accent-lilac)] px-2.5 py-0.5 font-mono text-[10px] font-bold text-[#0B0B0B]">
+          <span className="inline-flex items-center gap-1 rounded-full bg-[var(--accent-lilac)] px-2.5 py-0.5 font-mono text-[10px] font-bold text-[var(--on-fill)]">
             <Radio className="h-3 w-3" />
             <span>RELAYED ({msg.relayedHops} hops)</span>
           </span>
         );
       case 'SENT':
         return (
-          <span className="inline-flex items-center gap-1 rounded-full bg-[var(--accent-green)] px-2.5 py-0.5 font-mono text-[10px] font-bold text-[#0B0B0B]">
+          <span className="inline-flex items-center gap-1 rounded-full bg-[var(--accent-green)] px-2.5 py-0.5 font-mono text-[10px] font-bold text-[var(--on-fill)]">
             <span>SENT (1st hop)</span>
           </span>
         );
@@ -102,7 +102,7 @@ export function MessagesScreen() {
           </h1>
         </div>
         <div className="flex items-center gap-1.5 rounded-full border border-[var(--line)] bg-[var(--surface)] px-3 py-1 font-mono text-xs text-[var(--muted)]">
-          <Lock className="h-3.5 w-3.5 text-[var(--accent-blue)]" />
+          <Lock className="h-3.5 w-3.5 text-[var(--verified-ink)]" />
           <span>relays read headers only, never plaintext</span>
         </div>
       </div>
@@ -139,12 +139,12 @@ export function MessagesScreen() {
                       </span>
                       {peer.trustStatus === 'verified' ? (
                         <ShieldCheck
-                          className="h-4 w-4 text-[var(--accent-blue)]"
+                          className="h-4 w-4 text-[var(--verified-ink)]"
                           aria-label="Verified Contact"
                         />
                       ) : peer.trustStatus === 'key_changed' ? (
                         <ShieldAlert
-                          className="h-4 w-4 text-[var(--accent-coral)]"
+                          className="h-4 w-4 text-[var(--sos-ink)]"
                           aria-label="WARNING: Public key changed (TOFU alert)"
                         />
                       ) : null}
@@ -152,8 +152,8 @@ export function MessagesScreen() {
                     <span
                       className={`rounded-full px-2 py-0.5 font-mono text-[10px] font-bold ${
                         peer.isDirectNeighbor
-                          ? 'bg-[var(--accent-green)] text-[#0B0B0B]'
-                          : 'bg-[var(--accent-lilac)] text-[#0B0B0B]'
+                          ? 'bg-[var(--accent-green)] text-[var(--on-fill)]'
+                          : 'bg-[var(--accent-lilac)] text-[var(--on-fill)]'
                       }`}
                     >
                       {peer.hopsAway} {peer.hopsAway === 1 ? 'hop' : 'hops'}
@@ -248,7 +248,7 @@ export function MessagesScreen() {
                           onClick={() => setInspectedMsg(msg)}
                           className="flex cursor-pointer items-center gap-1 rounded-full border border-[var(--line)] bg-[var(--surface)] px-2.5 py-1 font-mono text-[10px] font-bold text-[var(--fg)] transition-colors hover:border-[var(--fg)]"
                         >
-                          <Eye className="h-3 w-3 text-[var(--accent-blue)]" />
+                          <Eye className="h-3 w-3 text-[var(--verified-ink)]" />
                           <span>inspect route & crypto</span>
                         </button>
                       </div>
@@ -266,7 +266,7 @@ export function MessagesScreen() {
               className="border-t border-[var(--line)] bg-[var(--surface-2)] p-3"
             >
               {sendError && (
-                <div className="mb-2 rounded-xl bg-[var(--accent-coral)]/15 px-3 py-1.5 font-mono text-xs text-[var(--accent-coral)]">
+                <div className="mb-2 rounded-xl bg-[var(--accent-coral)]/15 px-3 py-1.5 font-mono text-xs text-[var(--sos-ink)]">
                   {sendError}
                 </div>
               )}
@@ -296,7 +296,7 @@ export function MessagesScreen() {
 
                 <button
                   type="submit"
-                  className="flex min-h-[48px] cursor-pointer items-center gap-1.5 rounded-full bg-[var(--accent-green)] px-5 py-2.5 font-grotesk text-sm font-bold text-[#0B0B0B] transition-transform active:scale-95"
+                  className="flex min-h-[48px] cursor-pointer items-center gap-1.5 rounded-full bg-[var(--accent-green)] px-5 py-2.5 font-grotesk text-sm font-bold text-[var(--on-fill)] transition-transform active:scale-95"
                 >
                   <Send className="h-4 w-4" />
                   <span>send</span>

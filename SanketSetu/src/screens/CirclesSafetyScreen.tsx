@@ -94,7 +94,7 @@ export function CirclesSafetyScreen({ onNavigate }: CirclesSafetyScreenProps) {
     <section className="mx-auto w-full max-w-5xl px-4 pt-2 pb-28 sm:px-6">
       <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
         <div>
-          <span className="type-mono-label text-[var(--accent-blue)]">
+          <span className="type-mono-label text-[var(--verified-ink)]">
             05 / 08 — offline safety check circles & signed hazard beacons
           </span>
           <h1 className="type-h2 mt-0.5 font-grotesk text-[var(--fg)] lowercase">
@@ -120,7 +120,7 @@ export function CirclesSafetyScreen({ onNavigate }: CirclesSafetyScreenProps) {
           <div className="nova-card p-5">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex items-center gap-2">
-                <HeartHandshake className="h-4 w-4 text-[var(--accent-blue)]" />
+                <HeartHandshake className="h-4 w-4 text-[var(--verified-ink)]" />
                 <span className="type-mono-label text-[var(--muted)]">
                   one-tap safety check-in (signed safe packet · prio 1)
                 </span>
@@ -157,7 +157,7 @@ export function CirclesSafetyScreen({ onNavigate }: CirclesSafetyScreenProps) {
               <button
                 type="button"
                 onClick={() => void handleBroadcastSafe('SAFE')}
-                className="flex min-h-[52px] cursor-pointer items-center justify-center gap-2 rounded-2xl bg-[var(--accent-green)] px-4 py-3 font-grotesk text-sm font-bold text-[#0B0B0B] shadow-sm transition-transform active:scale-[0.99]"
+                className="flex min-h-[52px] cursor-pointer items-center justify-center gap-2 rounded-2xl bg-[var(--accent-green)] px-4 py-3 font-grotesk text-sm font-bold text-[var(--on-fill)] shadow-sm transition-transform active:scale-[0.99]"
               >
                 <CheckCircle2 className="h-4 w-4" />
                 <span>broadcast “i'm safe” to circle</span>
@@ -167,7 +167,7 @@ export function CirclesSafetyScreen({ onNavigate }: CirclesSafetyScreenProps) {
                 onClick={() => void handleBroadcastSafe('NEEDS_ASSISTANCE')}
                 className="flex min-h-[52px] cursor-pointer items-center justify-center gap-2 rounded-2xl border border-[var(--accent-coral)] bg-[var(--accent-coral)]/15 px-4 py-3 font-grotesk text-sm font-bold text-[var(--fg)]"
               >
-                <AlertOctagon className="h-4 w-4 text-[var(--accent-coral)]" />
+                <AlertOctagon className="h-4 w-4 text-[var(--sos-ink)]" />
                 <span>check-in: need supplies / help</span>
               </button>
             </div>
@@ -227,7 +227,7 @@ export function CirclesSafetyScreen({ onNavigate }: CirclesSafetyScreenProps) {
 
                     <div className="flex items-center gap-2">
                       {m.status === 'SAFE' ? (
-                        <span className="rounded-full bg-[var(--accent-green)] px-3 py-1 font-mono text-xs font-bold text-[#0B0B0B]">
+                        <span className="rounded-full bg-[var(--accent-green)] px-3 py-1 font-mono text-xs font-bold text-[var(--on-fill)]">
                           ✔ SAFE
                         </span>
                       ) : m.status === 'NEEDS_ASSISTANCE' ? (
@@ -280,7 +280,7 @@ export function CirclesSafetyScreen({ onNavigate }: CirclesSafetyScreenProps) {
         <div className="space-y-4 lg:col-span-5">
           <form onSubmit={handleSubmitHazard} className="nova-card p-5">
             <div className="mb-3 flex items-center justify-between">
-              <span className="type-mono-label text-[var(--accent-coral)]">
+              <span className="type-mono-label text-[var(--sos-ink)]">
                 report signed field hazard (ttl expiry)
               </span>
               <span className="font-mono text-[10px] text-[var(--muted)]">
@@ -389,7 +389,7 @@ export function CirclesSafetyScreen({ onNavigate }: CirclesSafetyScreenProps) {
                         By {hz.senderName} ({hz.hops} hop
                         {hz.hops === 1 ? '' : 's'})
                       </span>
-                      <span className="inline-flex items-center gap-1 text-[var(--accent-blue)]">
+                      <span className="inline-flex items-center gap-1 text-[var(--verified-ink)]">
                         <ShieldCheck className="h-3 w-3" />
                         <span>Ed25519 Signed</span>
                       </span>

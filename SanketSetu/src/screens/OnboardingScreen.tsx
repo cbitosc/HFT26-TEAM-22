@@ -116,12 +116,12 @@ export function OnboardingScreen({
         <div className="nova-card p-5">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
             <div className="flex items-center gap-2">
-              <KeyRound className="h-5 w-5 text-[var(--accent-blue)]" />
+              <KeyRound className="h-5 w-5 text-[var(--verified-ink)]" />
               <h2 className="font-grotesk text-lg font-bold text-[var(--fg)] lowercase">
                 01. cryptographic node identity (ed25519 + x25519)
               </h2>
             </div>
-            <span className="rounded-full bg-[var(--accent-green)] px-3 py-1 font-mono text-xs font-bold text-[#0B0B0B]">
+            <span className="rounded-full bg-[var(--accent-green)] px-3 py-1 font-mono text-xs font-bold text-[var(--on-fill)]">
               NODE ID #{identity.nodeId}
             </span>
           </div>
@@ -187,7 +187,7 @@ export function OnboardingScreen({
         {/* 2. Android Nearby Mesh Permissions — real OS grant state on native, explainer-only in browser */}
         <div className="nova-card p-5">
           <div className="mb-3 flex items-center gap-2">
-            <Smartphone className="h-5 w-5 text-[var(--accent-lilac)]" />
+            <Smartphone className="h-5 w-5 text-[var(--relay-ink)]" />
             <h2 className="font-grotesk text-lg font-bold text-[var(--fg)] lowercase">
               02. android p2p_cluster permissions
             </h2>
@@ -231,7 +231,7 @@ export function OnboardingScreen({
                       <span
                         className={`rounded px-1.5 py-0.5 font-mono text-[9px] font-bold uppercase ${
                           perm.requiredForCore
-                            ? 'bg-[var(--accent-lilac)] text-[#0B0B0B]'
+                            ? 'bg-[var(--accent-lilac)] text-[var(--on-fill)]'
                             : 'bg-[var(--surface)] text-[var(--muted)]'
                         }`}
                       >
@@ -249,7 +249,7 @@ export function OnboardingScreen({
                   </div>
                   <CheckCircle2
                     className={`h-5 w-5 shrink-0 ${
-                      granted ? 'text-[var(--accent-blue)]' : 'text-[var(--muted)]/40'
+                      granted ? 'text-[var(--verified-ink)]' : 'text-[var(--muted)]/40'
                     }`}
                   />
                 </div>
@@ -261,7 +261,7 @@ export function OnboardingScreen({
             <div className="mt-4 flex flex-col gap-2.5">
               {permissionState && !permissionState.allGranted && (
                 <div className="flex items-start gap-2 rounded-xl border border-[var(--accent-coral)]/40 bg-[var(--accent-coral)]/10 p-3 text-xs text-[var(--fg)]">
-                  <ShieldAlert className="h-4 w-4 shrink-0 text-[var(--accent-coral)]" />
+                  <ShieldAlert className="h-4 w-4 shrink-0 text-[var(--sos-ink)]" />
                   <span>
                     Some permissions are denied. The app still works — you'll see the simulated demo mesh — but it can't reach real nearby phones until core mesh permissions above are granted.
                   </span>
@@ -272,7 +272,7 @@ export function OnboardingScreen({
                   type="button"
                   onClick={() => void handleGrantAccess()}
                   disabled={requesting}
-                  className="flex min-h-[48px] items-center gap-2 rounded-full bg-[var(--accent-lilac)] px-5 text-sm font-bold text-[#0B0B0B] disabled:opacity-60"
+                  className="flex min-h-[48px] items-center gap-2 rounded-full bg-[var(--accent-lilac)] px-5 text-sm font-bold text-[var(--on-fill)] disabled:opacity-60"
                 >
                   <ShieldCheck className="h-4 w-4" />
                   {requesting ? 'requesting…' : 'grant access'}
@@ -293,7 +293,7 @@ export function OnboardingScreen({
         {/* 3. Power Mode & Language Selection */}
         <div className="nova-card p-5">
           <div className="mb-3 flex items-center gap-2">
-            <Radio className="h-5 w-5 text-[var(--accent-green)]" />
+            <Radio className="h-5 w-5 text-[var(--safe-ink)]" />
             <h2 className="font-grotesk text-lg font-bold text-[var(--fg)] lowercase">
               03. radio duty-cycle & language
             </h2>
@@ -369,7 +369,7 @@ export function OnboardingScreen({
         <div className="flex justify-end">
           <button
             type="submit"
-            className="flex min-h-[52px] cursor-pointer items-center gap-2 rounded-full bg-[var(--accent-green)] px-8 py-3 font-grotesk text-base font-bold text-[#0B0B0B] shadow-md transition-transform hover:scale-[1.01]"
+            className="flex min-h-[52px] cursor-pointer items-center gap-2 rounded-full bg-[var(--accent-green)] px-8 py-3 font-grotesk text-base font-bold text-[var(--on-fill)] shadow-md transition-transform hover:scale-[1.01]"
           >
             <ShieldCheck className="h-5 w-5" />
             <span>{sanketContent.onboarding.completeCta}</span>
