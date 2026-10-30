@@ -7,6 +7,7 @@
  */
 
 import { useState } from 'react';
+import { ShowMoreButton, usePagedList } from '../ui/paging';
 import {
   Activity,
   AlertOctagon,
@@ -31,6 +32,7 @@ export function MeshMapScreen({ onNavigate }: MeshMapScreenProps) {
   const simLinks = useMeshStore((s) => s.simLinks);
   const simTransmissions = useMeshStore((s) => s.simTransmissions);
   const setActiveConversation = useMeshStore((s) => s.setActiveConversation);
+  const pagedPeers = usePagedList(peers, 20);
 
   const [viewMode, setViewMode] = useState<'topology' | 'list'>('topology');
   const [is3dTilt, setIs3dTilt] = useState<boolean>(true);
@@ -370,7 +372,7 @@ export function MeshMapScreen({ onNavigate }: MeshMapScreenProps) {
       ) : (
         /* 2-Column Scannable Peer List View with Dead-Zone Risk Badge */
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          {peers.map((peer) => {
+          {pagedPeers.visible.map((peer) => {
             const deg = activeDegreeByNode.get(peer.nodeId) ?? 1;
             const isDeadZoneRisk = deg <= 1;
             return (
@@ -432,6 +434,7 @@ export function MeshMapScreen({ onNavigate }: MeshMapScreenProps) {
               </div>
             );
           })}
+          <ShowMoreButton hiddenCount={pagedPeers.hiddenCount} onClick={pagedPeers.showMore} label="Show more nodes" />
         </div>
       )}
     </section>

@@ -7,7 +7,7 @@
  * - Giant Hold-3-Seconds SOS button with radial progress + cancel, plus one-tap "I'm safe" check-in CTA.
  */
 
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import {
   AlertOctagon,
   ArrowUpRight,
@@ -22,7 +22,8 @@ import {
 } from 'lucide-react';
 import { AppScreenId, sanketContent } from '../content';
 import { useMeshStore } from '../store/useMeshStore';
-import { MeshOrbStage, OrbMeshState } from '../scenes/MeshOrbStage';
+import { MeshOrb, MeshOrbState } from '../ui/MeshOrb';
+import { HoldToSendButton } from '../ui/HoldToSendButton';
 import { ThemeMode } from '../ui/theme';
 import { soundEngine } from '../lib/audio';
 
@@ -51,55 +52,22 @@ export function HomeScreen({
   );
   const bridgedGatewayIds = useMeshStore((s) => s.bridgedGatewayIds);
 
-  // 3-second hold state for SOS button
-  const [holdProgress, setHoldProgress] = useState(0);
-  const [isHolding, setIsHolding] = useState(false);
   const [safeBanner, setSafeBanner] = useState(false);
-  const holdTimerRef = useRef<number | null>(null);
-  const holdStartRef = useRef<number>(0);
 
   const directPeers = peers.filter((p) => p.isDirectNeighbor);
-  const orbState: OrbMeshState = activeSosId
+  const orbState: MeshOrbState = activeSosId
     ? 'sos'
     : directPeers.length > 0
       ? 'connected'
       : 'scanning';
 
-  const startHold = () => {
-    if (activeSosId) return;
-    setIsHolding(true);
-    holdStartRef.current = performance.now();
-    soundEngine.playHoverTick();
-
-    const tick = (now: number) => {
-      const elapsed = now - holdStartRef.current;
-      const pct = Math.min(100, (elapsed / 3000) * 100);
-      setHoldProgress(pct);
-
-      if (pct >= 100) {
-        setIsHolding(false);
-        setHoldProgress(0);
-        soundEngine.playSelectChord();
-        void broadcastSOS({
-          category: 'medical',
-          text: 'EMERGENCY SOS BEACON: Immediate responder assistance requested at my node location.',
-          headcount: 1,
-        });
-        return;
-      }
-      holdTimerRef.current = requestAnimationFrame(tick);
-    };
-
-    holdTimerRef.current = requestAnimationFrame(tick);
-  };
-
-  const stopHold = () => {
-    if (holdTimerRef.current !== null) {
-      cancelAnimationFrame(holdTimerRef.current);
-      holdTimerRef.current = null;
-    }
-    setIsHolding(false);
-    setHoldProgress(0);
+  const sendHomeSos = () => {
+    soundEngine.playSosSent();
+    void broadcastSOS({
+      category: 'medical',
+      text: 'EMERGENCY SOS BEACON: Immediate responder assistance requested at my node location.',
+      headcount: 1,
+    });
   };
 
   const handleQuickSafe = async () => {
@@ -112,14 +80,6 @@ export function HomeScreen({
     setSafeBanner(true);
     setTimeout(() => setSafeBanner(false), 3000);
   };
-
-  useEffect(() => {
-    return () => {
-      if (holdTimerRef.current !== null) {
-        cancelAnimationFrame(holdTimerRef.current);
-      }
-    };
-  }, []);
 
   return (
     <section className="mx-auto flex w-full max-w-5xl flex-col justify-between gap-6 px-4 pt-2 pb-28 sm:px-6">
@@ -212,45 +172,12 @@ export function HomeScreen({
 
         {/* Right Column: Live 3D / Saver Glass Orb + Giant Hold-3-Seconds SOS Control */}
         <div className="flex flex-col items-center justify-center lg:col-span-5">
-          <MeshOrbStage
-            orbState={orbState}
-            peers={peers}
-            powerMode={metrics.powerMode}
-            batteryPct={metrics.batteryPct}
-            theme={theme}
-            isHomeScreen={true}
-            reducedMotion={reducedMotion}
-          />
+          <MeshOrb state={orbState} peers={peers} />
 
           {/* Giant Hold-3-Seconds SOS Button */}
           <div className="mt-4 flex w-full max-w-sm flex-col items-center gap-2.5">
             {!activeSosId ? (
-              <button
-                type="button"
-                onMouseDown={startHold}
-                onMouseUp={stopHold}
-                onMouseLeave={stopHold}
-                onTouchStart={startHold}
-                onTouchEnd={stopHold}
-                data-testid="sos-hold-button"
-                className="relative flex min-h-[64px] w-full cursor-pointer items-center justify-center overflow-hidden rounded-full border-2 border-[var(--accent-coral)] bg-[var(--accent-coral)] px-6 py-4 font-grotesk text-base font-bold text-white shadow-lg transition-transform active:scale-[0.98] select-none"
-              >
-                {/* Hold Progress Fill */}
-                <div
-                  className="pointer-events-none absolute inset-y-0 left-0 bg-[var(--on-fill)]/30 transition-none"
-                  style={{ width: `${holdProgress}%` }}
-                />
-                <div className="relative z-10 flex items-center gap-2.5">
-                  <AlertOctagon className="h-5 w-5" />
-                  <span>
-                    {isHolding
-                      ? `${sanketContent.home.sosHoldingPrompt} (${Math.ceil(
-                          (100 - holdProgress) * 0.03
-                        )}s)`
-                      : sanketContent.home.sosHoldPrompt}
-                  </span>
-                </div>
-              </button>
+              <HoldToSendButton onConfirm={sendHomeSos} />
             ) : (
               <div className="flex w-full flex-col gap-2 rounded-3xl border-2 border-[var(--accent-coral)] bg-[var(--accent-coral)]/12 p-4 text-center">
                 <div className="font-grotesk text-sm font-bold text-[var(--sos-ink)] uppercase">

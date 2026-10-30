@@ -7,12 +7,8 @@ import React, { Suspense, lazy, useEffect, useState } from 'react';
 import { AppScreenId, MOBILE_TABS } from './content';
 import { useReducedMotion } from './hooks/useReducedMotion';
 import { soundEngine } from './lib/audio';
-import { setDiscreteState } from "./lib/scroll";
-import { ThemeMode } from "./ui/theme";
-
-import { Preloader } from './scenes/Preloader';
-import { Grain } from './components/Grain';
-import { CircularText } from './components/CircularText';
+import { ThemeMode } from './ui/theme';
+import { Skeleton } from './ui/Skeleton';
 import { TopBar } from './app/TopBar';
 import { BottomPillNav } from './app/BottomPillNav';
 import { useMeshStore } from './store/useMeshStore';
@@ -53,12 +49,10 @@ const SettingsScreen = lazy(() =>
 
 function ScreenLoadingFallback() {
   return (
-    <div className="flex min-h-[60vh] w-full items-center justify-center">
-      <div
-        className="h-8 w-8 animate-spin rounded-full border-2 border-[var(--line)] border-t-[var(--accent-green)]"
-        role="status"
-        aria-label="Loading"
-      />
+    <div className="mx-auto w-full max-w-3xl space-y-3 px-4 pt-4" role="status" aria-label="Loading">
+      <Skeleton className="h-8 w-2/3" />
+      <Skeleton className="h-32 w-full" />
+      <Skeleton className="h-20 w-full" />
     </div>
   );
 }
@@ -85,20 +79,6 @@ export default function App() {
   const reducedMotion = useReducedMotion();
   const initMeshApp = useMeshStore((s) => s.initMeshApp);
 
-  const [isPreloading, setIsPreloading] = useState<boolean>(() => {
-    if (typeof window === 'undefined') return false;
-    const params = new URLSearchParams(window.location.search);
-    if (params.get('autostart') === '1') {
-      setDiscreteState({ isPreloaderDone: true });
-      return false;
-    }
-    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
-      setDiscreteState({ isPreloaderDone: true });
-      return false;
-    }
-    return true;
-  });
-
   const [activeScreen, setActiveScreen] = useState<AppScreenId>(() => {
     if (typeof window !== 'undefined') {
       return resolveScreenFromHash(window.location.hash) ?? 'home';
@@ -118,16 +98,6 @@ export default function App() {
   useEffect(() => {
     void initMeshApp();
   }, [initMeshApp]);
-
-  // Failsafe timer so Preloader never blocks the screen beyond 2.8s
-  useEffect(() => {
-    if (!isPreloading) return;
-    const timer = window.setTimeout(() => {
-      setDiscreteState({ isPreloaderDone: true });
-      setIsPreloading(false);
-    }, 2800);
-    return () => window.clearTimeout(timer);
-  }, [isPreloading]);
 
   useEffect(() => soundEngine.subscribe(() => setIsMuted(soundEngine.isMuted())), []);
 
@@ -159,17 +129,7 @@ export default function App() {
   const handleToggleTheme = (nextTheme: ThemeMode) => setTheme(nextTheme);
 
   return (
-    <div className="relative min-h-screen w-full bg-[var(--bg)] text-[var(--fg)] transition-colors duration-500">
-      {/* SCENE 0: Splash Preloader ("i'm sanket setu") */}
-      {isPreloading && (
-        <Preloader
-          reducedMotion={reducedMotion}
-          onComplete={() => setIsPreloading(false)}
-        />
-      )}
-
-      {/* Subtle Full-Page Multiply Film Grain & Faint 1px Structural Grid */}
-      <Grain />
+    <div className="relative min-h-screen w-full bg-[var(--bg)] text-[var(--fg)]">
 
       {/* Top Status & Theme Bar */}
       <TopBar
@@ -239,9 +199,6 @@ export default function App() {
           {activeScreen === 'settings' && <SettingsScreen />}
         </Suspense>
       </main>
-
-      {/* Bottom-Right Rotating Circular Badge */}
-      <CircularText reducedMotion={reducedMotion} />
 
       {/* Thumb-Reachable Floating Bottom Tab Pill Navigation */}
       <BottomPillNav

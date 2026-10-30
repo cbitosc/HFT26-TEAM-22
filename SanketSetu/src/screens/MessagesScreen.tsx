@@ -7,7 +7,8 @@
  * - Click / long-press any message -> opens the 3-tab MessageInspectorModal (Route, Packet, Crypto).
  */
 
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
+import { ShowMoreButton, usePagedList } from '../ui/paging';
 import {
   CheckCheck,
   Clock,
@@ -39,9 +40,11 @@ export function MessagesScreen() {
     activeConversationId ?? peers[peers.length - 1]?.nodeId ?? 'BROADCAST';
   const selectedPeer = peers.find((p) => p.nodeId === selectedPeerId);
 
-  const conversationMessages = messages.filter(
-    (m) => m.conversationId === selectedPeerId
+  const conversationMessages = useMemo(
+    () => messages.filter((m) => m.conversationId === selectedPeerId),
+    [messages, selectedPeerId]
   );
+  const pagedMessages = usePagedList(conversationMessages, 30, true);
 
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -212,7 +215,9 @@ export function MessagesScreen() {
                 </p>
               </div>
             ) : (
-              conversationMessages.map((msg) => {
+              <>
+              <ShowMoreButton hiddenCount={pagedMessages.hiddenCount} onClick={pagedMessages.showMore} label="Show earlier messages" />
+              {pagedMessages.visible.map((msg) => {
                 const isOutbound = msg.senderId === identity.nodeId;
                 return (
                   <div
@@ -255,7 +260,8 @@ export function MessagesScreen() {
                     </div>
                   </div>
                 );
-              })
+              })}
+              </>
             )}
           </div>
 

@@ -9,6 +9,7 @@
  */
 
 import { useState } from 'react';
+import { ShowMoreButton, usePagedList } from '../ui/paging';
 import {
   AlertTriangle,
   Check,
@@ -92,6 +93,8 @@ export function AlertsFeedScreen({ onNavigate }: AlertsFeedScreenProps) {
       });
     }
   }
+
+  const pagedClusters = usePagedList(clusters, 20);
 
   return (
     <section className="mx-auto w-full max-w-5xl px-4 pt-2 pb-28 sm:px-6">
@@ -178,7 +181,7 @@ export function AlertsFeedScreen({ onNavigate }: AlertsFeedScreenProps) {
       </div>
 
       <div className="space-y-4">
-        {clusters.map((cluster) => {
+        {pagedClusters.visible.map((cluster) => {
           const alert = cluster.primary;
           const isMine = alert.senderId === identity.nodeId;
           const mergedCount = cluster.members.length;
@@ -397,6 +400,7 @@ export function AlertsFeedScreen({ onNavigate }: AlertsFeedScreenProps) {
             </article>
           );
         })}
+        <ShowMoreButton hiddenCount={pagedClusters.hiddenCount} onClick={pagedClusters.showMore} label="Show more alerts" />
       </div>
     </section>
   );

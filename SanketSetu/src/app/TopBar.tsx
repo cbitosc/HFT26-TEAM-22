@@ -55,7 +55,7 @@ export function TopBar({
 
   return (
     <header className="sticky top-0 z-50 w-full px-3 pt-2.5 pb-2 sm:px-6">
-      <div className="mx-auto flex max-w-5xl items-center justify-between gap-2 rounded-full border border-[var(--line)] bg-[var(--surface)]/92 px-3 py-1.5 shadow-[var(--shadow-1)] backdrop-blur-md">
+      <div className="mx-auto flex max-w-5xl items-center justify-between gap-2 rounded-full border border-[var(--line)] bg-[var(--surface)] px-3 py-1.5 shadow-[var(--shadow-1)]">
         {/* Left: Brand & Node Identity */}
         <button
           type="button"

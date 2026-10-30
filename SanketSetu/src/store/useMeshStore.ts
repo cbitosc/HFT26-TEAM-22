@@ -68,7 +68,7 @@ import {
   sanketDb,
   saveKvJson,
 } from '../db/dexie';
-import { DEFAULT_FEATHERLESS_MODEL } from '../ai/featherless';
+import { DEFAULT_FEATHERLESS_MODEL } from '../ai/config';
 import { applyTheme, readInitialTheme, ThemeMode } from '../ui/theme';
 
 export interface VirtualPeerInstance {

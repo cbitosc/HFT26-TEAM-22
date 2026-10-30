@@ -225,7 +225,7 @@ function StaticCssOrbFallback({
         className="relative h-36 w-36 rounded-full shadow-2xl transition-transform duration-500 sm:h-42 sm:w-42"
         style={{ background: gradient }}
       >
-        <div className="absolute top-4 left-6 h-8 w-12 -rotate-25 rounded-full bg-white/45 blur-[2px]" />
+        <div className="absolute top-4 left-6 h-8 w-12 -rotate-25 rounded-full bg-white/45" />
       </div>
 
       {(powerMode === 'saver' || batteryPct < 15) && (
@@ -297,7 +297,7 @@ export function MeshOrbStage({
               <div
                 key={peer.nodeId}
                 style={{ transform: `translate(${rx}px, ${ry}px)` }}
-                className="absolute flex items-center gap-1 rounded-full border border-[var(--line)] bg-[var(--surface)]/92 px-2.5 py-0.5 font-mono text-[10px] font-semibold text-[var(--fg)] shadow-xs backdrop-blur-xs"
+                className="absolute flex items-center gap-1 rounded-full border border-[var(--line)] bg-[var(--surface)]/92 px-2.5 py-0.5 font-mono text-[10px] font-semibold text-[var(--fg)] shadow-xs"
               >
                 <span
                   className={`h-2 w-2 rounded-full ${

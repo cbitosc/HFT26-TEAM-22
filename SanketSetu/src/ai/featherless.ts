@@ -22,10 +22,9 @@ import {
 import { classifyEmergencyOffline } from './fallbackClassifier';
 import { StoredSOSAlert } from '../mesh/types';
 
-export const FEATHERLESS_ENDPOINT =
-  'https://api.featherless.ai/v1/chat/completions';
-export const DEFAULT_FEATHERLESS_MODEL =
-  'meta-llama/Meta-Llama-3.1-8B-Instruct';
+import { DEFAULT_FEATHERLESS_MODEL, FEATHERLESS_ENDPOINT } from './config';
+
+export { DEFAULT_FEATHERLESS_MODEL, FEATHERLESS_ENDPOINT };
 
 export interface FeatherlessConfig {
   apiKey: string;

@@ -138,7 +138,7 @@ export function SOSComposerScreen({ onNavigate }: SOSComposerScreenProps) {
         <div className="nova-card mb-5 border-2 border-[var(--accent-coral)]/60 p-4 sm:p-5">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex items-center gap-2">
-              <span className="inline-flex h-2.5 w-2.5 animate-ping rounded-full bg-[var(--accent-coral)]" />
+              <span className="inline-flex h-2.5 w-2.5 sos-pulse rounded-full bg-[var(--accent-coral)]" />
               <span className="font-mono text-xs font-bold tracking-wider text-[var(--sos-ink)] uppercase">
                 closed-loop sos status tracker · packet #{trackedSos.id.slice(0, 8)}
               </span>

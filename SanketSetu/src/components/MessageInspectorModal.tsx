@@ -67,7 +67,7 @@ export function MessageInspectorModal({
       role="dialog"
       aria-modal="true"
       aria-label="Cryptographic Packet & Route Inspector"
-      className="fixed inset-0 z-60 flex items-center justify-center bg-black/55 p-3 backdrop-blur-xs sm:p-6"
+      className="fixed inset-0 z-60 flex items-center justify-center bg-black/55 p-3 sm:p-6"
     >
       <div className="nova-card flex max-h-[88svh] w-full max-w-2xl flex-col overflow-hidden border border-[var(--line)] bg-[var(--surface)] shadow-[var(--shadow-3)]">
         {/* Header */}

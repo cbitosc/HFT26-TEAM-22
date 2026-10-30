@@ -62,7 +62,7 @@ export function BottomPillNav({
     <div className="pointer-events-none fixed inset-x-0 bottom-0 z-50 flex flex-col items-center pb-3 px-2 sm:px-6">
       <div className="mx-auto flex w-full max-w-5xl items-center justify-between gap-2">
         {/* Bottom-Left NOVA Section Index Counter */}
-        <div className="pointer-events-auto hidden items-center gap-2 rounded-full border border-[var(--line)] bg-[var(--surface)]/92 px-3.5 py-2 font-mono text-[11px] font-semibold tracking-wider text-[var(--fg)] uppercase shadow-[var(--shadow-1)] backdrop-blur-md xl:flex">
+        <div className="pointer-events-auto hidden items-center gap-2 rounded-full border border-[var(--line)] bg-[var(--surface)] px-3.5 py-2 font-mono text-[11px] font-semibold tracking-wider text-[var(--fg)] uppercase shadow-[var(--shadow-1)] xl:flex">
           <span className="text-[var(--muted)]">
             {activeTabMeta.counterIndex} / 08
           </span>
@@ -72,7 +72,7 @@ export function BottomPillNav({
         {/* Centered Thumb-Reachable Floating Pill Bar */}
         <nav
           aria-label="Primary Mobile Navigation"
-          className="pointer-events-auto mx-auto flex w-full max-w-3xl items-center justify-between gap-1 overflow-x-auto rounded-full border border-[var(--line)] bg-[var(--surface)]/95 p-1.5 shadow-[var(--shadow-2)] backdrop-blur-xl"
+          className="pointer-events-auto mx-auto flex w-full max-w-3xl items-center justify-between gap-1 overflow-x-auto rounded-full border border-[var(--line)] bg-[var(--surface)] p-1.5 shadow-[var(--shadow-2)]"
         >
           {MOBILE_TABS.map((tab) => {
             const isActive = activeScreen === tab.id;
