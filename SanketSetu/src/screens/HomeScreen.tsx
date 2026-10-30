@@ -28,6 +28,7 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
   const broadcastSOS = useMeshStore((s) => s.broadcastSOS);
   const cancelActiveSOS = useMeshStore((s) => s.cancelActiveSOS);
   const sendImSafeToCircle = useMeshStore((s) => s.sendImSafeToCircle);
+  const circleId = useMeshStore((s) => s.circles[0]?.circleId ?? 'circle-nearby');
   const [safeSent, setSafeSent] = useState(false);
 
   const orbState: MeshOrbState = activeSosId
@@ -47,7 +48,7 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
 
   const sendSafeCheckIn = async () => {
     soundEngine.playSelectChord();
-    await sendImSafeToCircle('circle-family-alpha', 'SAFE', "I'm safe. Check-in sent from Sanket Setu.");
+    await sendImSafeToCircle(circleId, 'SAFE', "I'm safe. Check-in sent from Sanket Setu.");
     setSafeSent(true);
     window.setTimeout(() => setSafeSent(false), 3000);
   };

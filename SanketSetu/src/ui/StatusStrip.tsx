@@ -24,13 +24,11 @@ function Item({ children }: { children: ReactNode }) {
 
 export function StatusStrip() {
   const isOnline = useMeshStore((s) => s.isOnline);
-  const realRadioPeerCount = useMeshStore((s) => s.realRadioPeerCount);
-  const directPeerCount = useMeshStore(
-    (s) => s.peers.filter((p) => p.isDirectNeighbor).length
-  );
+  const appMode = useMeshStore((s) => s.appMode);
+  const connectedPhones = useMeshStore((s) => s.peers.filter((p) => p.isDirectNeighbor).length);
   const powerMode = useMeshStore((s) => s.metrics.powerMode);
   const batteryPct = useMeshStore((s) => s.metrics.batteryPct);
-  const hasRealRadio = realRadioPeerCount > 0;
+  const demo = appMode === 'demo';
 
   return (
     <div
@@ -39,25 +37,25 @@ export function StatusStrip() {
       className="flex min-h-[var(--status-h)] flex-wrap items-center gap-x-3 gap-y-1 border-b border-[var(--line)] bg-[var(--surface-2)] px-3 py-1.5 text-[var(--fg)]"
     >
       <Item>
+        {demo ? (
+          <Cpu aria-hidden="true" className="h-4 w-4 text-[var(--warn-ink)]" />
+        ) : (
+          <Radio aria-hidden="true" className="h-4 w-4 text-[var(--verified-ink)]" />
+        )}
+        {demo ? 'DEMO' : 'REAL RADIO'}
+      </Item>
+      <Item>
         {isOnline ? (
-          <Wifi aria-hidden="true" className="h-4 w-4 text-[var(--safe-ink)]" />
+          <Wifi aria-hidden="true" className="h-4 w-4 text-[var(--fg-secondary)]" />
         ) : (
           <WifiOff aria-hidden="true" className="h-4 w-4 text-[var(--fg-secondary)]" />
         )}
-        {isOnline ? 'Online' : 'Offline'}
-      </Item>
-      <Item>
-        {hasRealRadio ? (
-          <Radio aria-hidden="true" className="h-4 w-4 text-[var(--verified-ink)]" />
-        ) : (
-          <Cpu aria-hidden="true" className="h-4 w-4 text-[var(--fg-secondary)]" />
-        )}
-        {hasRealRadio ? 'Real radio' : 'Simulated'}
+        {isOnline ? 'ONLINE' : 'OFFLINE'}
       </Item>
       <Item>
         <Users aria-hidden="true" className="h-4 w-4 text-[var(--fg-secondary)]" />
-        <span className="tabular-nums">{directPeerCount}</span>
-        {directPeerCount === 1 ? 'peer' : 'peers'}
+        <span className="tabular-nums">{connectedPhones}</span>
+        {connectedPhones === 1 ? 'phone nearby' : 'phones nearby'}
       </Item>
       <Item>
         {batteryPct < 15 ? (

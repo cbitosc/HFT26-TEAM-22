@@ -529,6 +529,8 @@ export class MeshEngine {
     locationPrecision: LocationPrecision;
     lat?: number;
     lng?: number;
+    /** Real GPS accuracy in metres when known; never defaulted to a flattering number. */
+    accuracyMeters?: number;
     pictogramId?: string;
     isLastGasp?: boolean;
   }): Promise<StoredSOSAlert> {
@@ -548,8 +550,7 @@ export class MeshEngine {
         ? sealPreciseLocation({
             lat: params.lat as number,
             lng: params.lng as number,
-            accuracyMeters: 8,
-            altitudeMeters: 912,
+            accuracyMeters: params.accuracyMeters ?? 50,
           })
         : undefined;
 
@@ -602,7 +603,7 @@ export class MeshEngine {
           ? {
               lat: params.lat as number,
               lng: params.lng as number,
-              accuracyMeters: 8,
+              accuracyMeters: params.accuracyMeters ?? 50,
             }
           : null,
       pictogramId: params.pictogramId,

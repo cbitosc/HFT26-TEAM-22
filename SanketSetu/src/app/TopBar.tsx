@@ -39,7 +39,7 @@ export function TopBar({ onNavigate }: TopBarProps) {
               SOS active
             </Badge>
           ) : (
-            <Badge tone="neutral">Offline mesh</Badge>
+            <Badge tone="neutral">Works offline</Badge>
           )}
         </button>
 

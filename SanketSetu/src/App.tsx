@@ -8,6 +8,8 @@ import { AppScreenId, MOBILE_TABS } from './content';
 import { useReducedMotion } from './hooks/useReducedMotion';
 import { Skeleton } from './ui/Skeleton';
 import { Splash } from './ui/Splash';
+import { DemoGate } from './ui/DemoGate';
+import { NearbyMapScreen } from './screens/NearbyMapScreen';
 import { PinUnlockScreen } from './screens/PinUnlockScreen';
 import { TopBar } from './app/TopBar';
 import { BottomPillNav } from './app/BottomPillNav';
@@ -95,6 +97,7 @@ export default function App() {
   const locked = useMeshStore((s) => s.locked);
   const initReady = useMeshStore((s) => s.initReady);
   const onboardingDone = useMeshStore((s) => s.onboardingDone);
+  const appMode = useMeshStore((s) => s.appMode);
   const theme = useMeshStore((s) => s.theme);
   const setTheme = useMeshStore((s) => s.setTheme);
   const isSaverMode = useMeshStore((s) => s.metrics.powerMode === 'saver');
@@ -153,6 +156,12 @@ export default function App() {
   return (
     <div className="relative min-h-screen w-full overflow-x-hidden bg-[var(--bg)] text-[var(--fg)]">
       <TopBar onNavigate={handleNavigate} />
+
+      {appMode === 'demo' && (
+        <div role="status" className="border-b border-[var(--line)] bg-[var(--warn-tint)] px-4 py-2 text-center text-sm font-bold text-[var(--warn-ink)]">
+          DEMO MODE: simulated phones, not real
+        </div>
+      )}
 
       {permissionState && !permissionState.allGranted && (
         <div role="alert" className="mx-auto flex w-full flex-wrap items-center justify-between gap-2 border-b border-[var(--warn-ink)]/30 bg-[var(--warn-tint)] px-4 py-2.5">
@@ -214,10 +223,14 @@ export default function App() {
           {activeScreen === 'circles' && (
             <CirclesSafetyScreen onNavigate={handleNavigate} />
           )}
-          {activeScreen === 'map' && (
-            <MeshMapScreen onNavigate={handleNavigate} />
-          )}
-          {activeScreen === 'simulator' && <SimulatorScreen />}
+          {activeScreen === 'map' &&
+            (appMode === 'demo' ? (
+              <MeshMapScreen onNavigate={handleNavigate} />
+            ) : (
+              <NearbyMapScreen />
+            ))}
+          {activeScreen === 'simulator' &&
+            (appMode === 'demo' ? <SimulatorScreen /> : <DemoGate what="The simulator" />)}
           {activeScreen === 'quality' && <MeshQualityScreen />}
           {activeScreen === 'ai' && <AIAssistantScreen />}
           {activeScreen === 'settings' && <SettingsScreen />}

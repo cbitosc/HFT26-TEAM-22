@@ -29,7 +29,7 @@ export type PacketReceivedCallback = (
 ) => void | Promise<void>;
 
 export interface Transport {
-  readonly transportName: 'nearby' | 'sim' | 'loopback';
+  readonly transportName: 'nearby' | 'sim' | 'loopback' | 'none';
   start(): Promise<void>;
   stop(): Promise<void>;
   send(peerId: string, bytes: Uint8Array): Promise<boolean>;

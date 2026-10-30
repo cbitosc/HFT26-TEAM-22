@@ -49,14 +49,20 @@ import {
   SimLinkTransmissionEvent,
   SimNetworkController,
   SimNodePosition,
-  SimTransport,
 } from '../transport/SimTransport';
 import {
   MeshPermissionState,
   NearbyMeshNative,
   NearbyTransport,
 } from '../transport/NearbyTransport';
-import { CompositeTransport } from '../transport/CompositeTransport';
+import { NullTransport } from '../transport/NullTransport';
+import {
+  buildDemoWorld,
+  createSimTransport,
+  crossRegisterDemoContacts,
+  seedDemoTraffic,
+  VirtualPeerInstance,
+} from './demoRuntime';
 import { Transport } from '../transport/Transport';
 import { MeshEngine, PacketDropLogEntry } from '../mesh/engine';
 import {
@@ -73,16 +79,17 @@ import {
   saveKvJson,
 } from '../db/dexie';
 import { DEFAULT_FEATHERLESS_MODEL } from '../ai/config';
+import { getCurrentFix } from '../lib/location';
 import { applyTheme, readInitialTheme, ThemeMode } from '../ui/theme';
 
-export interface VirtualPeerInstance {
-  identity: NodeIdentity;
-  transport: SimTransport;
-  engine: MeshEngine;
-}
+export type { VirtualPeerInstance } from './demoRuntime';
+export type AppMode = 'real' | 'demo';
 
 export interface MeshStoreState {
   initialized: boolean;
+  appMode: AppMode;
+  /** Set when an SOS had to go out without the location the user asked for. */
+  lastSosLocationNote: string | null;
   onboardingDone: boolean;
   identity: NodeIdentity;
   language: string;
@@ -261,11 +268,14 @@ export interface MeshStoreState {
 
   unlockWithPin: (pin: string) => Promise<boolean>;
   enablePin: (pin: string) => Promise<void>;
+  setAppMode: (mode: AppMode) => Promise<void>;
   setTheme: (mode: ThemeMode) => void;
   setVisuals3D: (enabled: boolean) => void;
   dismissDarkSuggestion: () => void;
 }
 
+const REAL_CIRCLE_ID = 'circle-nearby';
+const DEMO_CIRCLE_ID = 'circle-demo-family';
 const simController = new SimNetworkController();
 let localEngine: MeshEngine | null = null;
 let nativeNearbyTransport: NearbyTransport | null = null;
@@ -424,22 +434,33 @@ function buildUpdatedCircles(
   userIdentity: NodeIdentity,
   peers: PeerNode[],
   safetyChecks: ReturnType<MeshEngine['getSafetyChecks']>,
-  batteryPct: number
+  batteryPct: number,
+  demo: boolean
 ): SafetyCircle[] {
   const baseCircles: SafetyCircle[] =
     existingCircles.length > 0
       ? existingCircles
-      : [
+      : !demo
+        ? [
+            {
+              circleId: REAL_CIRCLE_ID,
+              circleName: 'People nearby',
+              circleKeyHint: '',
+              createdAt: Date.now(),
+              members: [],
+            },
+          ]
+        : [
           {
-            circleId: 'circle-family-alpha',
-            circleName: 'Home & Family Circle (Ward 14)',
+            circleId: DEMO_CIRCLE_ID,
+            circleName: 'Demo family circle',
             circleKeyHint: 'SHA256:9A4F·B21E',
             createdAt: Date.now() - 3600_000,
             members: [],
           },
           {
             circleId: 'circle-relief-team',
-            circleName: 'Sector 4 Civil Relief Roster',
+            circleName: 'Demo relief roster',
             circleKeyHint: 'SHA256:C308·77D1',
             createdAt: Date.now() - 1800_000,
             members: [],
@@ -511,7 +532,8 @@ function syncStoreFromEngine(
     localEngine.identity,
     peers,
     safetyChecks,
-    metrics.batteryPct
+    metrics.batteryPct,
+    get().appMode === 'demo'
   );
 
   localEngine.metricLogger.recordPeerCount(
@@ -521,7 +543,7 @@ function syncStoreFromEngine(
   // Telemetry cards: recompute the (comparatively expensive) quality snapshot at most once per
   // second, and keep the previous object reference when nothing changed so selectors on
   // `metrics` / `meshQuality` don't re-render for identical values.
-  schedulePersistState();
+  if (get().appMode === 'real') schedulePersistState();
   const prev = get();
   const nextMetrics = shallowEqualRecord(prev.metrics, metrics) ? prev.metrics : metrics;
   const now = Date.now();
@@ -557,229 +579,128 @@ function syncStoreFromEngine(
   });
 }
 
-async function setupDefaultFourNodeChain(
-  userIdentity: NodeIdentity,
-  set: (partial: Partial<MeshStoreState>) => void,
-  get: () => MeshStoreState
-) {
-  // Stop any existing virtual instances
+async function teardownMesh(): Promise<void> {
   for (const inst of virtualInstances.values()) {
     await inst.engine.stop();
     simController.unregisterNode(inst.identity.nodeId);
   }
   virtualInstances.clear();
-
   if (localEngine) {
+    const me = localEngine.identity.nodeId;
     await localEngine.stop();
-    simController.unregisterNode(userIdentity.nodeId);
+    simController.unregisterNode(me);
   }
+  nativeNearbyTransport = null;
+}
 
-  // Radio range 290 so:
-  // A (130, 300) <-> B (360, 220) distance = 243 (IN RANGE)
-  // B (360, 220) <-> C (590, 350) distance = 264 (IN RANGE)
-  // C (590, 350) <-> D (820, 240) distance = 255 (IN RANGE)
-  // A <-> C distance = 462 (OUT OF RANGE)
-  // A <-> D distance = 692 (OUT OF RANGE)
-  simController.setRadioRange(290);
+/**
+ * Builds and starts the mesh for the chosen mode.
+ * - REAL: the only transport is the Nearby radio (or NullTransport where there is no radio, e.g. the
+ *   browser). No SimTransport, no virtual phones, no fixture traffic. Everything shown comes from
+ *   real engine events plus this phone's own persisted state.
+ * - DEMO: simulated phones and fixtures from ./demoRuntime. Nothing from DEMO is persisted.
+ */
+async function setupMesh(
+  mode: AppMode,
+  userIdentity: NodeIdentity,
+  set: (partial: Partial<MeshStoreState>) => void,
+  get: () => MeshStoreState
+) {
+  await teardownMesh();
 
-  const userSimTransport = new SimTransport(
-    userIdentity.nodeId,
-    userIdentity.displayName,
-    simController,
-    130,
-    300
-  );
-
-  // On a real Android device, the engine talks over BOTH the real Nearby Connections radio
-  // AND the in-memory demo mesh (so the seeded demo peers below are always visible for judging
-  // even without a second phone in range, while real nearby phones also show up as real peers).
-  // In the browser (no native bridge), it's SimTransport only — NearbyTransport.start() would
-  // just throw internally and do nothing, so there's no point including it there.
-  let engineTransport: Transport = userSimTransport;
-  if (Capacitor.isNativePlatform()) {
+  let transport: Transport;
+  let virtuals: VirtualPeerInstance[] = [];
+  if (mode === 'demo') {
+    const world = buildDemoWorld(userIdentity, simController);
+    transport = world.userTransport;
+    virtuals = world.virtuals;
+    console.info('[SanketMesh] Mode DEMO: SimTransport only (simulated phones).');
+  } else if (Capacitor.isNativePlatform()) {
     nativeNearbyTransport = new NearbyTransport(userIdentity.nodeId, userIdentity.displayName);
-    engineTransport = new CompositeTransport([nativeNearbyTransport, userSimTransport]);
-    // eslint-disable-next-line no-console
-    console.info(
-      '[SanketMesh] Transport: CompositeTransport (NearbyTransport = REAL RADIO + SimTransport = SIMULATED demo mesh). ' +
-        'Real-radio peer connectivity depends on Nearby permissions being granted — see the top bar / Settings for live status.'
-    );
+    transport = nativeNearbyTransport;
+    console.info('[SanketMesh] Mode REAL: NearbyTransport (real radio) only.');
   } else {
-    nativeNearbyTransport = null;
-    // eslint-disable-next-line no-console
-    console.info(
-      '[SanketMesh] Transport: SimTransport only (SIMULATED). No native bridge in a browser — this is expected, not an error.'
-    );
+    transport = new NullTransport();
+    console.info('[SanketMesh] Mode REAL on a device without a radio (browser): no transport, no peers.');
   }
 
   localEngine = new MeshEngine({
     identity: userIdentity,
-    transport: engineTransport,
+    transport,
     responderCert: get().myResponderCert,
     relayJitterMs: 15,
     retryTickMs: 1000,
   });
 
-  // Resume anything that was queued before the app was killed or the phone rebooted: the
-  // engine's retry loop and the next peerFound pick it up from here.
-  try {
-    const [msgs, alerts, outboxRows] = await Promise.all([
-      sanketDb.messages.where('senderId').equals(userIdentity.nodeId).toArray(),
-      sanketDb.alerts.where('senderId').equals(userIdentity.nodeId).toArray(),
-      sanketDb.outbox.toArray(),
-    ]);
-    localEngine.restoreState({
-      messages: msgs,
-      alerts,
-      outbox: outboxRows.filter((e) => e.packet.src === userIdentity.nodeId),
-    });
-  } catch {
-    // IndexedDB unavailable (private mode): run without persistence.
-  }
-
-  // Hydrate 1h SeenCache from Dexie and wire persistence callback
-  const persistedSeen = await loadUnexpiredSeenEntries();
-  localEngine.seenCache.hydrateFromStorage(persistedSeen);
-  localEngine.seenCache.setPersistCallback((row) => {
-    queueSeenPersist(row);
-  });
-
-  const virtualSpecs = [
-    { name: 'RELAY-B (North Ridge)', x: 360, y: 220, battery: 82, isVerifiedMedic: false },
-    { name: 'RELAY-C (Bridge Post)', x: 590, y: 350, battery: 64, isVerifiedMedic: false },
-    { name: 'MEDIC-D (Field Base)', x: 820, y: 240, battery: 91, isVerifiedMedic: true },
-  ];
-
-  const createdVirtuals: VirtualPeerInstance[] = [];
-  for (const spec of virtualSpecs) {
-    const vId = generateNodeIdentity(spec.name);
-    const vTransport = new SimTransport(
-      vId.nodeId,
-      vId.displayName,
-      simController,
-      spec.x,
-      spec.y
-    );
-    // Issue a genuine Authority-signed ResponderCertificate for MEDIC-D (Field Base)
-    const cert = spec.isVerifiedMedic
-      ? issueResponderCertificate({
-          subjectNodeId: vId.nodeId,
-          subjectSignPubB64: vId.signPublicKeyB64,
-          subjectDisplayName: vId.displayName,
-          role: 'NDRF_MEDIC',
-          organizationName: 'NDRF Field Medical Unit 04 (DEMO AUTHORITY)',
-        })
-      : null;
-
-    const vEngine = new MeshEngine({
-      identity: vId,
-      transport: vTransport,
-      responderCert: cert,
-      relayJitterMs: 15,
-      initialBatteryPct: spec.battery,
-    });
-    virtualInstances.set(vId.nodeId, {
-      identity: vId,
-      transport: vTransport,
-      engine: vEngine,
-    });
-    createdVirtuals.push({
-      identity: vId,
-      transport: vTransport,
-      engine: vEngine,
-    });
-  }
-
-  // Cross-register public keys across the 4-node demo mesh so user can immediately message B, C, or D (3 hops away!)
-  const allEngines = [localEngine, ...createdVirtuals.map((v) => v.engine)];
-  for (const engA of allEngines) {
-    for (const engB of allEngines) {
-      if (engA.identity.nodeId === engB.identity.nodeId) continue;
-      engA.registerContactPublicKey(
-        engB.identity.nodeId,
-        engB.identity.displayName,
-        engB.identity.signPublicKeyB64,
-        engB.identity.boxPublicKeyB64,
-        engB.identity.displayName.startsWith('MEDIC-D')
-      );
+  let restoredSosId: string | null = null;
+  if (mode === 'real') {
+    // One-time cleanup: earlier builds mixed simulated fixtures into the same tables.
+    try {
+      if (!(await loadKvJson<boolean>('real_mode_clean_v1'))) {
+        await Promise.all([
+          sanketDb.messages.clear(),
+          sanketDb.alerts.clear(),
+          sanketDb.outbox.clear(),
+          sanketDb.seen.clear(),
+        ]);
+        await saveKvJson('real_mode_clean_v1', true);
+      }
+      const [msgs, alerts, outboxRows] = await Promise.all([
+        sanketDb.messages.where('senderId').equals(userIdentity.nodeId).toArray(),
+        sanketDb.alerts.where('senderId').equals(userIdentity.nodeId).toArray(),
+        sanketDb.outbox.toArray(),
+      ]);
+      const mine = outboxRows.filter((e) => e.packet.src === userIdentity.nodeId);
+      localEngine.restoreState({ messages: msgs, alerts, outbox: mine });
+      const pendingSos = mine.find((e) => e.packet.type === 'SOS');
+      restoredSosId = pendingSos ? pendingSos.packet.id : null;
+    } catch {
+      // IndexedDB unavailable (private mode): run without persistence.
     }
+    const persistedSeen = await loadUnexpiredSeenEntries();
+    localEngine.seenCache.hydrateFromStorage(persistedSeen);
+    localEngine.seenCache.setPersistCallback((row) => {
+      queueSeenPersist(row);
+    });
   }
+
+  for (const v of virtuals) virtualInstances.set(v.identity.nodeId, v);
+  if (mode === 'demo') crossRegisterDemoContacts(localEngine, virtuals);
 
   localEngine.onStateChange(() => {
     scheduleThrottledSync(set, get);
   });
 
   await localEngine.start();
-  for (const v of createdVirtuals) {
-    await v.engine.start();
-  }
+  for (const v of virtuals) await v.engine.start();
 
-  // Apply the identity's initial power mode to the native duty-cycle scheduler too, so a device
-  // that starts in Balanced/Saver (e.g. restored from a previous session) duty-cycles from the
-  // first scan rather than defaulting to Active until the next explicit setPowerMode() call.
   void nativeNearbyTransport?.setPowerMode(localEngine.getEffectivePowerMode());
 
-  simController.recomputeNeighborhoods();
-
-  // Seed initial multi-hop traffic:
-  // 1. Direct E2E message from MEDIC-D -> User across C and B
-  // 2. SOS with Responder-Sealed Precise Location from RELAY-C
-  // 3. Verified Responder SOS_ACK from MEDIC-D so the closed-loop tracker is immediately visible
-  // 4. Signed Hazard report (Flooded underpass) and a Circle Safety Check-In
-  const medicD = createdVirtuals[2];
-  const relayC = createdVirtuals[1];
-  const relayB = createdVirtuals[0];
-  if (medicD && relayC && relayB) {
-    await medicD.engine.sendDirectMessage(
-      userIdentity.nodeId,
-      'Field Base D online. Multi-hop route via Relay-C and Relay-B verified with Ed25519.',
-      2
-    );
-    const seededSos = await relayC.engine.broadcastSOS({
-      category: 'flood',
-      text: 'Water rising at Sector 4 Bridge Post. 3 civilians awaiting high-clearance extraction.',
-      headcount: 3,
-      locationPrecision: 'precise',
-      lat: 12.97159,
-      lng: 77.59456,
-      pictogramId: 'trapped_flood',
-    });
-    await medicD.engine.sendSosAck(
-      seededSos.id,
-      'RESPONDING',
-      'NDRF Zodiac boat dispatched from Field Base D — ETA 11 mins.'
-    );
-    await relayB.engine.broadcastHazardReport({
-      category: 'flood',
-      title: 'Submerged Causeway — North Ridge',
-      description: '1.4m fast-moving water over NH-48 underpass. Impassable forwheeled vehicles.',
-      lat: 12.9742,
-      lng: 77.5918,
-      ttlMinutes: 180,
-    });
-    await medicD.engine.broadcastSafetyCheck({
-      circleId: 'circle-family-alpha',
-      circleName: 'Home & Family Circle (Ward 14)',
-      status: 'SAFE',
-      note: 'Stationed at high-ground relief camp, generator running.',
-    });
+  if (mode === 'demo') {
+    simController.recomputeNeighborhoods();
+    await seedDemoTraffic(userIdentity, virtuals);
   }
 
-  const dNodeId = createdVirtuals[2]?.identity.nodeId ?? null;
-  const firstMsgId = localEngine.getMessages()[0]?.id ?? null;
-
+  const medic = virtuals[2];
   set({
     initialized: true,
-    activeConversationId: dNodeId,
-    inspectedMessageId: firstMsgId,
+    appMode: mode,
+    activeSosId: restoredSosId,
+    activeConversationId: mode === 'demo' ? (medic?.identity.nodeId ?? null) : 'BROADCAST',
+    inspectedMessageId: mode === 'demo' ? (localEngine.getMessages()[0]?.id ?? null) : null,
+    circles: [],
+    bridgedGatewayIds: [],
+    simTransmissions: [],
   });
   syncStoreFromEngine(set, get);
 }
 
-const initialIdentity = generateNodeIdentity('SANKET-A (You)');
+const initialIdentity = generateNodeIdentity('');
 
 export const useMeshStore = create<MeshStoreState>((set, get) => ({
   initialized: false,
+  appMode: Capacitor.isNativePlatform() ? 'real' : 'demo',
+  lastSosLocationNote: null,
   onboardingDone: false,
   identity: initialIdentity,
   language: 'English',
@@ -966,6 +887,8 @@ export const useMeshStore = create<MeshStoreState>((set, get) => ({
     const savedAiKey = await loadKvJson<string>('featherless_api_key');
     const savedAiModel = await loadKvJson<string>('featherless_model');
     const savedCert = await loadKvJson<ResponderCertificate>('responder_cert');
+    const savedMode = await loadKvJson<AppMode>('app_mode');
+    set({ appMode: savedMode === 'real' || savedMode === 'demo' ? savedMode : get().appMode });
     const savedTheme = await loadKvJson<ThemeMode>('ui_theme');
     const savedVisuals3D = await loadKvJson<boolean>('ui_visuals_3d');
     const savedDarkDismissed = await loadKvJson<boolean>('ui_dark_suggestion_dismissed');
@@ -994,7 +917,7 @@ export const useMeshStore = create<MeshStoreState>((set, get) => ({
 
     set({ initStep: 'Starting radio' });
     try {
-      await setupDefaultFourNodeChain(activeIdentity, set, get);
+      await setupMesh(get().appMode, activeIdentity, set, get);
     } finally {
       set({ initReady: true, initStep: 'Ready' });
     }
@@ -1034,7 +957,7 @@ export const useMeshStore = create<MeshStoreState>((set, get) => ({
     powerMode,
     featherlessApiKey,
   }) => {
-    const cleanName = displayName.trim() || 'SANKET-A (You)';
+    const cleanName = displayName.trim() || `Phone ${get().identity.nodeId.slice(0, 4)}`;
     const updatedIdentity: NodeIdentity = {
       ...get().identity,
       displayName: cleanName,
@@ -1096,15 +1019,21 @@ export const useMeshStore = create<MeshStoreState>((set, get) => ({
     if (pct <= 5 && !isCharging && !get().lastGaspTriggered && localEngine) {
       set({ lastGaspTriggered: true });
       localEngine.setPowerPreference('saver');
-      void localEngine
-        .broadcastSOS({
-          category: 'other',
-          text: `[LAST-GASP BEACON · ${pct}% BATTERY] Device entering emergency power-down. Last known coordinates attached.`,
-          headcount: 1,
-          locationPrecision: 'coarse',
-          lat: get().simulatedLat,
-          lng: get().simulatedLng,
-          isLastGasp: true,
+      const demo = get().appMode === 'demo';
+      void (demo ? Promise.resolve(null) : getCurrentFix(3000))
+        .then((fix) => {
+          const lat = demo ? get().simulatedLat : fix?.lat;
+          const lng = demo ? get().simulatedLng : fix?.lng;
+          return localEngine!.broadcastSOS({
+            category: 'other',
+            text: `[LAST-GASP BEACON · ${pct}% BATTERY] Device entering emergency power-down.${lat !== undefined ? ' Last known approximate position attached.' : ''}`,
+            headcount: 1,
+            locationPrecision: lat !== undefined ? 'coarse' : 'disabled',
+            lat,
+            lng,
+            accuracyMeters: fix?.accuracyMeters,
+            isLastGasp: true,
+          });
         })
         .then((alert) => {
           set({ activeSosId: alert.id });
@@ -1238,14 +1167,37 @@ export const useMeshStore = create<MeshStoreState>((set, get) => ({
     if (!localEngine) {
       throw new Error('Mesh engine not initialized');
     }
-    const precision = locationPrecision ?? get().locationOptIn;
+    let precision = locationPrecision ?? get().locationOptIn;
+    let lat: number | undefined;
+    let lng: number | undefined;
+    let accuracyMeters: number | undefined;
+    let locationNote: string | null = null;
+    if (precision !== 'disabled') {
+      if (get().appMode === 'demo') {
+        lat = get().simulatedLat;
+        lng = get().simulatedLng;
+      } else {
+        // REAL mode: only a real GPS fix is ever attached; otherwise send without a location.
+        const fix = await getCurrentFix();
+        if (fix) {
+          lat = fix.lat;
+          lng = fix.lng;
+          accuracyMeters = fix.accuracyMeters;
+        } else {
+          precision = 'disabled';
+          locationNote = 'Location was not available, so the SOS was sent without it.';
+        }
+      }
+    }
+    set({ lastSosLocationNote: locationNote });
     const alert = await localEngine.broadcastSOS({
       category,
       text,
       headcount,
       locationPrecision: precision,
-      lat: get().simulatedLat,
-      lng: get().simulatedLng,
+      lat,
+      lng,
+      accuracyMeters,
       pictogramId,
       isLastGasp,
     });
@@ -1360,7 +1312,7 @@ export const useMeshStore = create<MeshStoreState>((set, get) => ({
     const circle =
       get().circles.find((c) => c.circleId === circleId) ?? get().circles[0];
     await localEngine.broadcastSafetyCheck({
-      circleId: circle?.circleId ?? 'circle-family-alpha',
+      circleId: circle?.circleId ?? REAL_CIRCLE_ID,
       circleName: circle?.circleName ?? 'Home & Family Circle (Ward 14)',
       status,
       note:
@@ -1378,7 +1330,7 @@ export const useMeshStore = create<MeshStoreState>((set, get) => ({
       get().circles.find((c) => c.circleId === circleId) ?? get().circles[0];
     if (!inst) return;
     await inst.engine.broadcastSafetyCheck({
-      circleId: circle?.circleId ?? 'circle-family-alpha',
+      circleId: circle?.circleId ?? REAL_CIRCLE_ID,
       circleName: circle?.circleName ?? 'Home & Family Circle (Ward 14)',
       status,
       note,
@@ -1397,12 +1349,27 @@ export const useMeshStore = create<MeshStoreState>((set, get) => ({
     if (!localEngine) {
       throw new Error('Mesh engine not initialized');
     }
+    let hazardLat = lat;
+    let hazardLng = lng;
+    if (hazardLat === undefined || hazardLng === undefined) {
+      if (get().appMode === 'demo') {
+        hazardLat = get().simulatedLat + 0.002;
+        hazardLng = get().simulatedLng - 0.0015;
+      } else {
+        const fix = await getCurrentFix();
+        if (!fix) {
+          throw new Error('Your location is not available, so the hazard cannot be placed on the map. Allow location and try again.');
+        }
+        hazardLat = fix.lat;
+        hazardLng = fix.lng;
+      }
+    }
     const report = await localEngine.broadcastHazardReport({
       category,
       title,
       description,
-      lat: lat ?? get().simulatedLat + 0.002,
-      lng: lng ?? get().simulatedLng - 0.0015,
+      lat: hazardLat,
+      lng: hazardLng,
       ttlMinutes: ttlMinutes ?? 120,
     });
     syncStoreFromEngine(set, get);
@@ -1446,7 +1413,7 @@ export const useMeshStore = create<MeshStoreState>((set, get) => ({
     const vId = generateNodeIdentity(callsign);
     const x = 220 + ((idx * 170) % 580);
     const y = 140 + ((idx * 130) % 340);
-    const vTransport = new SimTransport(
+    const vTransport = createSimTransport(
       vId.nodeId,
       vId.displayName,
       simController,
@@ -1507,7 +1474,7 @@ export const useMeshStore = create<MeshStoreState>((set, get) => ({
   },
 
   resetFourNodeChainPreset: async () => {
-    await setupDefaultFourNodeChain(get().identity, set, get);
+    await setupMesh('demo', get().identity, set, get);
   },
 
   triggerRemoteSimMessage: async (fromVirtualNodeId, toNodeId, text) => {
@@ -1625,7 +1592,7 @@ export const useMeshStore = create<MeshStoreState>((set, get) => ({
     } catch {
       // ignore
     }
-    const freshId = generateNodeIdentity('SANKET-A (You)');
+    const freshId = generateNodeIdentity('');
     await persistIdentity(freshId);
     set({
       identity: freshId,
@@ -1633,7 +1600,7 @@ export const useMeshStore = create<MeshStoreState>((set, get) => ({
       myResponderCert: null,
       bridgedGatewayIds: [],
     });
-    await setupDefaultFourNodeChain(freshId, set, get);
+    await setupMesh(get().appMode, freshId, set, get);
   },
 
   checkMeshPermissions: async () => {
@@ -1672,6 +1639,13 @@ export const useMeshStore = create<MeshStoreState>((set, get) => ({
   },
 
   dismissPermissionGate: () => set({ permissionGateDismissed: true }),
+
+  setAppMode: async (mode: AppMode) => {
+    if (mode === get().appMode && get().initialized) return;
+    await saveKvJson('app_mode', mode);
+    set({ appMode: mode, activeSosId: null });
+    await setupMesh(mode, get().identity, set, get);
+  },
 
   setTheme: (mode: ThemeMode) => {
     applyTheme(mode);

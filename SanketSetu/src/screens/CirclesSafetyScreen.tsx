@@ -78,16 +78,23 @@ export function CirclesSafetyScreen({ onNavigate }: CirclesSafetyScreenProps) {
     setNewCircleKey('');
   };
 
+  const [hazardError, setHazardError] = useState<string | null>(null);
+
   const handleSubmitHazard = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!hazardTitle.trim()) return;
     soundEngine.playSelectChord();
-    await reportHazard({
-      category: hazardCategory,
-      title: hazardTitle.trim(),
-      description: hazardDesc.trim(),
-      ttlMinutes: hazardTtlMins,
-    });
+    setHazardError(null);
+    try {
+      await reportHazard({
+        category: hazardCategory,
+        title: hazardTitle.trim(),
+        description: hazardDesc.trim(),
+        ttlMinutes: hazardTtlMins,
+      });
+    } catch (err) {
+      setHazardError(err instanceof Error ? err.message : 'Could not send the hazard report.');
+    }
   };
 
   return (
@@ -279,6 +286,11 @@ export function CirclesSafetyScreen({ onNavigate }: CirclesSafetyScreenProps) {
         {/* RIGHT COLUMN: SIGNED HAZARD REPORTS WITH TTL EXPIRY (§8.11) */}
         <div className="space-y-4 lg:col-span-5">
           <form onSubmit={handleSubmitHazard} className="nova-card p-5">
+            {hazardError && (
+              <p role="alert" className="mb-3 rounded-[var(--radius-sm)] bg-[var(--sos-tint)] p-3 text-sm font-semibold text-[var(--sos-ink)]">
+                {hazardError}
+              </p>
+            )}
             <div className="mb-3 flex items-center justify-between">
               <span className="type-mono-label text-[var(--sos-ink)]">
                 report signed field hazard (ttl expiry)

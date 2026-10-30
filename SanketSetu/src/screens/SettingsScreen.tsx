@@ -35,6 +35,8 @@ import {
 } from '../crypto/responderCert';
 
 export function SettingsScreen() {
+  const appMode = useMeshStore((s) => s.appMode);
+  const setAppMode = useMeshStore((s) => s.setAppMode);
   const theme = useMeshStore((s) => s.theme);
   const setTheme = useMeshStore((s) => s.setTheme);
   const visuals3D = useMeshStore((s) => s.visuals3D);
@@ -139,6 +141,12 @@ export function SettingsScreen() {
       <div className="nova-card p-5">
         <h2 className="mb-2 text-lg font-bold text-[var(--fg)]">Display &amp; sound</h2>
         <div className="divide-y divide-[var(--line)]">
+          <Toggle
+            label="Demo mode (simulated phones)"
+            description="Shows made-up phones and messages so you can try the app alone. Turn off to use real nearby phones."
+            checked={appMode === 'demo'}
+            onChange={(on) => void setAppMode(on ? 'demo' : 'real')}
+          />
           <Toggle
             label="Dark mode"
             description="Saves battery on OLED screens."
