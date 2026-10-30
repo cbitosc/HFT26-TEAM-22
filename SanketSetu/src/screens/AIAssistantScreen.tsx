@@ -167,8 +167,8 @@ export function AIAssistantScreen() {
           <span className="type-mono-label text-[var(--muted)]">
             07 / 07 — optional online triage assistant + offline keyword classifier
           </span>
-          <h1 className="type-h2 mt-0.5 font-grotesk text-[var(--fg)] lowercase">
-            featherless.ai triage & rule-based fallback
+          <h1 className="type-h2 mt-0.5 font-grotesk text-[var(--fg)]">
+          AI assistant and offline classifier
           </h1>
         </div>
 
@@ -200,7 +200,7 @@ export function AIAssistantScreen() {
         <ShieldAlert className="h-4 w-4 shrink-0 text-[var(--sos-ink)]" />
         <span className="font-bold">{sanketContent.aiDisclaimer}.</span>
         <span className="text-[var(--muted)]">
-          Core mesh messaging and SOS work 100% offline without AI.
+          Core messaging and SOS work without the AI assistant.
         </span>
       </div>
 

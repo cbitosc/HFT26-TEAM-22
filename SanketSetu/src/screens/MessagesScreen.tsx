@@ -102,8 +102,8 @@ export function MessagesScreen() {
           <span className="type-mono-label text-[var(--muted)]">
             02 / 07 — end-to-end encrypted mesh threads
           </span>
-          <h1 className="type-h2 mt-0.5 font-grotesk text-[var(--fg)] lowercase">
-            x25519 + ed25519 store-and-forward messages
+          <h1 className="type-h2 mt-0.5 font-grotesk text-[var(--fg)]">
+            Messages
           </h1>
         </div>
         <div className="flex items-center gap-1.5 rounded-full border border-[var(--line)] bg-[var(--surface)] px-3 py-1 font-mono text-xs text-[var(--muted)]">

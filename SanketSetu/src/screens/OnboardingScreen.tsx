@@ -103,7 +103,7 @@ export function OnboardingScreen({
         <span className="type-mono-label text-[var(--muted)]">
           {sanketContent.onboarding.kicker}
         </span>
-        <h1 className="type-h1 mt-1 font-grotesk text-[var(--fg)] lowercase">
+        <h1 className="type-h1 mt-1 font-grotesk text-[var(--fg)]">
           {sanketContent.onboarding.title}
         </h1>
         <p className="type-body mt-2 max-w-2xl text-[var(--muted)]">
@@ -117,8 +117,8 @@ export function OnboardingScreen({
           <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
             <div className="flex items-center gap-2">
               <KeyRound className="h-5 w-5 text-[var(--verified-ink)]" />
-              <h2 className="font-grotesk text-lg font-bold text-[var(--fg)] lowercase">
-                01. cryptographic node identity (ed25519 + x25519)
+              <h2 className="font-grotesk text-lg font-bold text-[var(--fg)]">
+              Create your device identity
               </h2>
             </div>
             <span className="rounded-full bg-[var(--accent-green)] px-3 py-1 font-mono text-xs font-bold text-[var(--on-fill)]">
@@ -188,8 +188,8 @@ export function OnboardingScreen({
         <div className="nova-card p-5">
           <div className="mb-3 flex items-center gap-2">
             <Smartphone className="h-5 w-5 text-[var(--relay-ink)]" />
-            <h2 className="font-grotesk text-lg font-bold text-[var(--fg)] lowercase">
-              02. android p2p_cluster permissions
+            <h2 className="font-grotesk text-lg font-bold text-[var(--fg)]">
+              Nearby device permissions
             </h2>
           </div>
           <p className="mb-4 text-sm text-[var(--muted)]">
@@ -225,7 +225,7 @@ export function OnboardingScreen({
                 >
                   <div>
                     <div className="flex items-center gap-1.5">
-                      <span className="font-grotesk text-sm font-bold text-[var(--fg)] lowercase">
+                      <span className="font-grotesk text-sm font-bold text-[var(--fg)]">
                         {perm.title}
                       </span>
                       <span
@@ -294,8 +294,8 @@ export function OnboardingScreen({
         <div className="nova-card p-5">
           <div className="mb-3 flex items-center gap-2">
             <Radio className="h-5 w-5 text-[var(--safe-ink)]" />
-            <h2 className="font-grotesk text-lg font-bold text-[var(--fg)] lowercase">
-              03. radio duty-cycle & language
+            <h2 className="font-grotesk text-lg font-bold text-[var(--fg)]">
+              Power mode and language
             </h2>
           </div>
 
@@ -313,7 +313,7 @@ export function OnboardingScreen({
                       : 'border-[var(--line)] bg-[var(--surface-2)] text-[var(--fg)]'
                   }`}
                 >
-                  <div className="font-grotesk text-base font-bold lowercase">
+                  <div className="font-grotesk text-base font-bold">
                     {pm.label}
                   </div>
                   <div className="mt-1 font-mono text-[11px] opacity-85">
@@ -359,7 +359,7 @@ export function OnboardingScreen({
                 type="password"
                 value={aiKey}
                 onChange={(e) => setAiKey(e.target.value)}
-                placeholder="Leave blank for 100% offline rule-based triage"
+                placeholder="Leave blank to use the offline rule-based classifier"
                 className="mt-1.5 min-h-[48px] w-full rounded-xl border border-[var(--line)] bg-[var(--surface-2)] px-3.5 font-mono text-xs text-[var(--fg)]"
               />
             </div>

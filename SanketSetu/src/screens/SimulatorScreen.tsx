@@ -143,8 +143,8 @@ export function SimulatorScreen() {
           <span className="type-mono-label text-[var(--relay-ink)]">
             06 / 07 — interactive multi-node mesh testbed ({sanketContent.simulatedBadge})
           </span>
-          <h1 className="type-h2 mt-0.5 font-grotesk text-[var(--fg)] lowercase">
-            4-node chain (a→b→c→d), link break & epidemic sync simulator
+          <h1 className="type-h2 mt-0.5 font-grotesk text-[var(--fg)]">
+            Four-node simulator
           </h1>
         </div>
 

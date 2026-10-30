@@ -65,8 +65,8 @@ export function MeshMapScreen({ onNavigate }: MeshMapScreenProps) {
             06 / 08 — live p2p_cluster topology, dead-zone risk & hazards (
             {sanketContent.simulatedBadge})
           </span>
-          <h1 className="type-h2 mt-0.5 font-grotesk text-[var(--fg)] lowercase">
-            multi-hop radio graph & dead-zone risk
+          <h1 className="type-h2 mt-0.5 font-grotesk text-[var(--fg)]">
+            Mesh map and coverage gaps
           </h1>
         </div>
 

@@ -97,8 +97,8 @@ export function CirclesSafetyScreen({ onNavigate }: CirclesSafetyScreenProps) {
           <span className="type-mono-label text-[var(--verified-ink)]">
             05 / 08 — offline safety check circles & signed hazard beacons
           </span>
-          <h1 className="type-h2 mt-0.5 font-grotesk text-[var(--fg)] lowercase">
-            family circles & field hazard reports
+          <h1 className="type-h2 mt-0.5 font-grotesk text-[var(--fg)]">
+            Safety circles and hazard reports
           </h1>
           <p className="mt-1 text-xs text-[var(--muted)]">
             Lightweight signed SAFE and HAZARD packets reduce panic traffic on the mesh and reconcile automatically via anti-entropy SYNC_INV when partitioned nodes reconnect.

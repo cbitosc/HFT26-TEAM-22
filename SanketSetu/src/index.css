@@ -87,25 +87,11 @@
   font-family: var(--font-ui);
 }
 
-/* Older screens used lowercase as decoration; keep their text in sentence case. */
-.lowercase {
-  text-transform: none;
-}
-
 /* Prevent tiny metadata utilities from shrinking below a readable caption size. */
 [class~="text-[10px]"],
 [class~="text-[11px]"] {
   font-size: 0.75rem !important;
   line-height: 1.4;
-}
-
-/* Former editorial treatments — neutralised to plain text so nothing relies on outline/serif. */
-.font-serif-editorial,
-.text-treatment-outline {
-  font-family: var(--font-ui);
-  font-style: normal;
-  color: var(--fg);
-  -webkit-text-stroke: 0;
 }
 
 .tabular-nums {

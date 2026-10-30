@@ -107,8 +107,8 @@ export function AlertsFeedScreen({ onNavigate }: AlertsFeedScreenProps) {
           <span className="type-mono-label text-[var(--sos-ink)]">
             04 / 08 — priority emergency feed (sorted: prio → recency → hops)
           </span>
-          <h1 className="type-h2 mt-0.5 font-grotesk text-[var(--fg)] lowercase">
-            active sos & responder-sealed beacons ({sortedAlerts.length})
+          <h1 className="type-h2 mt-0.5 font-grotesk text-[var(--fg)]">
+            Alerts ({sortedAlerts.length})
           </h1>
         </div>
 

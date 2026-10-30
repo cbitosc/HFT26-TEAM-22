@@ -730,7 +730,7 @@ export const sanketContent = {
 
   onboarding: {
     kicker: '00 — zero-internet field setup',
-    title: 'initialize your sanket setu node',
+    title: 'Initialize your Sanket Setu node',
     subtitle:
       'Your cryptographic identity is generated locally on this device using Ed25519 + X25519. No phone number, SIM card, or server required.',
     nameLabel: 'responder / callsign display name',

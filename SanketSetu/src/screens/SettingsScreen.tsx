@@ -129,8 +129,8 @@ export function SettingsScreen() {
         <span className="type-mono-label text-[var(--muted)]">
           08 — node configuration, responder certificates, setu gateway & power
         </span>
-        <h1 className="type-h2 mt-0.5 font-grotesk text-[var(--fg)] lowercase">
-          sanket setu settings & cryptography
+        <h1 className="type-h2 mt-0.5 font-grotesk text-[var(--fg)]">
+          Sanket Setu settings and security
         </h1>
       </div>
 
@@ -164,8 +164,8 @@ export function SettingsScreen() {
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <Battery className="h-5 w-5 text-[var(--safe-ink)]" />
-            <h2 className="font-grotesk text-lg font-bold text-[var(--fg)] lowercase">
-              01. battery power modes, activity meter & last-gasp sos
+            <h2 className="font-grotesk text-lg font-bold text-[var(--fg)]">
+              Battery modes and activity
             </h2>
           </div>
           <span className="rounded-full bg-[var(--accent-green)] px-3 py-1 font-mono text-xs font-bold text-[var(--on-fill)]">
@@ -217,7 +217,7 @@ export function SettingsScreen() {
                     : 'border-[var(--line)] bg-[var(--surface-2)] text-[var(--fg)]'
                 }`}
               >
-                <div className="font-grotesk text-base font-bold lowercase">
+                <div className="font-grotesk text-base font-bold">
                   {pm.label}
                 </div>
                 <div className="font-mono text-[10px] opacity-85">
@@ -273,8 +273,8 @@ export function SettingsScreen() {
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <Award className="h-5 w-5 text-[var(--verified-ink)]" />
-            <h2 className="font-grotesk text-lg font-bold text-[var(--fg)] lowercase">
-              02. verified responder certificate ({sanketContent.demoAuthorityBadge})
+            <h2 className="font-grotesk text-lg font-bold text-[var(--fg)]">
+              Responder certificate ({sanketContent.demoAuthorityBadge})
             </h2>
           </div>
           {myResponderCert ? (
@@ -358,8 +358,8 @@ export function SettingsScreen() {
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-2">
                 <Globe className="h-5 w-5 text-[var(--verified-ink)]" />
-                <h2 className="font-grotesk text-base font-bold text-[var(--fg)] lowercase">
-                  gateway “setu” bridge
+                <h2 className="font-grotesk text-base font-bold text-[var(--fg)]">
+                  Setu gateway bridge
                 </h2>
               </div>
               <span className="rounded bg-[var(--surface-2)] px-2 py-0.5 font-mono text-[10px] font-bold text-[var(--verified-ink)] uppercase">
@@ -400,8 +400,8 @@ export function SettingsScreen() {
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-2">
                 <Compass className="h-5 w-5 text-[var(--sos-ink)]" />
-                <h2 className="font-grotesk text-base font-bold text-[var(--fg)] lowercase">
-                  rescuer locate (last 20m)
+                <h2 className="font-grotesk text-base font-bold text-[var(--fg)]">
+                  Rescuer location (last 20 minutes)
                 </h2>
               </div>
               <span className="rounded bg-[var(--accent-coral)]/15 px-2 py-0.5 font-mono text-[10px] font-bold text-[var(--sos-ink)] uppercase">
@@ -446,8 +446,8 @@ export function SettingsScreen() {
       <div className="nova-card p-5">
         <div className="mb-3 flex items-center gap-2">
           <QrCode className="h-5 w-5 text-[var(--verified-ink)]" />
-          <h2 className="font-grotesk text-lg font-bold text-[var(--fg)] lowercase">
-            03. offline qr scan-to-trust & key verification
+          <h2 className="font-grotesk text-lg font-bold text-[var(--fg)]">
+            Scan a QR code to verify a contact
           </h2>
         </div>
 
@@ -532,8 +532,8 @@ export function SettingsScreen() {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <KeyRound className="h-5 w-5 text-[var(--relay-ink)]" />
-            <h2 className="font-grotesk text-lg font-bold text-[var(--fg)] lowercase">
-              04. identity, safe-circle key & optional featherless ai
+            <h2 className="font-grotesk text-lg font-bold text-[var(--fg)]">
+              Identity, circle key, and optional AI
             </h2>
           </div>
           {savedNotice && (
@@ -649,8 +649,8 @@ export function SettingsScreen() {
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <Radio className="h-5 w-5 text-[var(--sos-ink)]" />
-            <h2 className="font-grotesk text-lg font-bold text-[var(--fg)] lowercase">
-              05. persistent store-and-forward outbox ({outbox.length} packets)
+            <h2 className="font-grotesk text-lg font-bold text-[var(--fg)]">
+              Outbox ({outbox.length} queued)
             </h2>
           </div>
 

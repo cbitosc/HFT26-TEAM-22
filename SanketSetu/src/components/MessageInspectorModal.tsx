@@ -76,7 +76,7 @@ export function MessageInspectorModal({
             <span className="type-mono-label text-[var(--muted)]">
               packet inspector · id #{message.id.slice(0, 12)}
             </span>
-            <h3 className="font-grotesk text-lg font-bold text-[var(--fg)] lowercase">
+            <h3 className="font-grotesk text-lg font-bold text-[var(--fg)]">
               {message.packet.type} packet · {wireBytes} bytes (limit 4096 B)
             </h3>
           </div>
