@@ -10,6 +10,11 @@
 
 import { useState } from 'react';
 import { ShowMoreButton, usePagedList } from '../ui/paging';
+import { withinRadius } from '../lib/geo';
+
+function bestPosition(a: StoredSOSAlert): { lat?: number; lng?: number } {
+  return a.unsealedPreciseLocation ?? { lat: a.lat, lng: a.lng };
+}
 import { EmptyState } from '../ui/EmptyState';
 import { Card } from '../ui/Card';
 import { Button } from '../ui/Button';
@@ -57,23 +62,26 @@ export function AlertsFeedScreen({ onNavigate }: AlertsFeedScreenProps) {
   );
 
   const [clusterMode, setClusterMode] = useState<boolean>(false);
+  const [sortMode, setSortMode] = useState<'priority' | 'recent' | 'hops'>('priority');
 
   // Sort strictly by Priority -> Recency -> Proximity (hops)
   const sortedAlerts = [...alerts].sort((a, b) => {
+    if (sortMode === 'recent') return b.timestamp - a.timestamp || a.priority - b.priority;
+    if (sortMode === 'hops') return a.hops - b.hops || a.priority - b.priority;
     if (a.priority !== b.priority) return a.priority - b.priority;
     if (b.timestamp !== a.timestamp) return b.timestamp - a.timestamp;
     return a.hops - b.hops;
   });
 
-  // Incident Clustering (§9.7): group alerts of same category within ~0.01 deg
+  // Incident clustering: same category within 200 m. Civilians only see coarse (~1 km) positions, so
+  // clusters form reliably only for alerts whose precise position this node can unseal (responders).
   const clusters: ClusteredIncident[] = [];
   if (clusterMode) {
     for (const alert of sortedAlerts) {
       const existing = clusters.find(
         (c) =>
           c.primary.category === alert.category &&
-          Math.abs((c.primary.lat ?? 0) - (alert.lat ?? 0)) <= 0.02 &&
-          Math.abs((c.primary.lng ?? 0) - (alert.lng ?? 0)) <= 0.02
+          withinRadius(bestPosition(c.primary), bestPosition(alert))
       );
       if (existing) {
         existing.members.push(alert);
@@ -113,6 +121,19 @@ export function AlertsFeedScreen({ onNavigate }: AlertsFeedScreenProps) {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          <div role="group" aria-label="Sort alerts" className="flex rounded-full border border-[var(--line)] bg-[var(--surface)] p-1">
+            {([['priority', 'Priority'], ['recent', 'Newest'], ['hops', 'Nearest']] as const).map(([id, label]) => (
+              <button
+                key={id}
+                type="button"
+                aria-pressed={sortMode === id}
+                onClick={() => setSortMode(id)}
+                className={`min-h-[44px] rounded-full px-3 text-sm font-semibold ${sortMode === id ? 'bg-[var(--fg)] text-[var(--bg)]' : 'text-[var(--fg)]'}`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
           <button
             type="button"
             onClick={() => setClusterMode((v) => !v)}

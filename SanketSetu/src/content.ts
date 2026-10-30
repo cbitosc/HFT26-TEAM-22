@@ -16,6 +16,7 @@ export type AppScreenId =
   | 'circles'
   | 'map'
   | 'simulator'
+  | 'quality'
   | 'ai'
   | 'settings'
   | 'onboarding';

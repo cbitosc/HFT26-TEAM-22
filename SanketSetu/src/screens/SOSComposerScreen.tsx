@@ -1,3 +1,4 @@
+import { Pictogram, pictogramFor } from '../ui/Pictogram';
 import { useMemo, useState } from 'react';
 import { Check, ChevronRight, Languages, MapPin, ShieldAlert, ShieldCheck } from 'lucide-react';
 import {
@@ -98,7 +99,7 @@ export function SOSComposerScreen({ onNavigate }: SOSComposerScreenProps) {
               onClick={() => setSelectedPictogramId(picto.id)}
               className={`flex min-h-24 items-center gap-3 rounded-2xl border p-3 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--verified)] ${selected ? 'border-[var(--sos)] bg-[var(--sos-tint)] text-[var(--sos-ink)]' : 'border-[var(--line)] bg-[var(--surface)] text-[var(--fg)]'}`}
             >
-              <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-[var(--surface-2)] text-3xl" aria-hidden="true">{picto.glyph}</span>
+              <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-[var(--surface-2)] " aria-hidden="true"><Pictogram name={pictogramFor(picto.id, picto.category)} className="h-8 w-8" /></span>
               <span className="min-w-0 text-base leading-snug font-semibold">{picto.localized[pictoLang].title}</span>
               {selected && <Check aria-hidden="true" className="ml-auto h-5 w-5 shrink-0" />}
             </button>

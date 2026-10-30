@@ -40,13 +40,37 @@ export interface PeerCountSample {
   peerCount: number;
 }
 
+/** Latency (ms) from send to arrival at the destination node, for one traffic class. */
+export interface BenchmarkClassStats {
+  sent: number;
+  /** Packets that actually arrived within the timeout; latencies are only over these. */
+  arrived: number;
+  p50Ms: number | null;
+  p95Ms: number | null;
+}
+
+/** Measured result of one Congestion Benchmark run (SIMULATED transport; nothing here is estimated). */
 export interface CongestionBenchmarkSummary {
   ranAtTs: number;
-  floodPacketsCount: number;
-  sosLatencyMs: number;
-  normalMeanLatencyMs: number;
-  normalMaxLatencyMs: number;
-  sosBypassSpeedupFactor: number;
+  sos: BenchmarkClassStats;
+  normal: BenchmarkClassStats;
+}
+
+/** Nearest-rank percentile over a list of samples; null when there are none. */
+export function percentile(samples: number[], p: number): number | null {
+  if (samples.length === 0) return null;
+  const sorted = [...samples].sort((a, b) => a - b);
+  const rank = Math.max(1, Math.ceil((p / 100) * sorted.length));
+  return sorted[rank - 1];
+}
+
+export function summarizeLatencies(sent: number, latenciesMs: number[]): BenchmarkClassStats {
+  return {
+    sent,
+    arrived: latenciesMs.length,
+    p50Ms: percentile(latenciesMs, 50),
+    p95Ms: percentile(latenciesMs, 95),
+  };
 }
 
 export interface MeshQualitySnapshot {

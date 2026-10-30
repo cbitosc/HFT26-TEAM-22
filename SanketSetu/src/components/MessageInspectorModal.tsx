@@ -6,6 +6,7 @@
  * - Tab 3: Crypto (live Ed25519 signature verification, X25519/Channel cipher suite, SHA-256 hash)
  */
 
+import { BridgeChain, DeliveryBridge } from '../ui/BridgeStatus';
 import { useState } from 'react';
 import {
   CheckCircle2,
@@ -165,29 +166,16 @@ export function MessageInspectorModal({
                 </span>
               </div>
 
-              {/* Recorded Multi-Hop Chain */}
+              <div className="rounded-2xl border border-[var(--line)] p-4">
+                <DeliveryBridge state={message.deliveryState} hops={message.relayedHops} />
+              </div>
+
               <div>
-                <div className="type-mono-label mb-2 text-[var(--muted)]">
-                  recorded multi-hop relay chain ({message.route.length} nodes)
+                <div className="mb-2 text-sm font-semibold text-[var(--fg-secondary)]">
+                  Relay path ({message.route.length} node{message.route.length === 1 ? '' : 's'})
                 </div>
-                <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-[var(--line)] p-4">
-                  {message.route.map((hopNodeId, idx) => (
-                    <div key={`${hopNodeId}-${idx}`} className="flex items-center gap-2">
-                      <div className="flex items-center gap-2 rounded-xl border border-[var(--line)] bg-[var(--surface-2)] px-3 py-2 font-mono text-xs">
-                        <span className="rounded-full bg-[var(--fg)] px-1.5 py-0.5 text-[10px] font-bold text-[var(--bg)]">
-                          H{idx}
-                        </span>
-                        <span className="font-bold text-[var(--fg)]">
-                          {hopNodeId}
-                        </span>
-                      </div>
-                      {idx < message.route.length - 1 && (
-                        <span className="font-mono text-xs font-bold text-[var(--relay-ink)]">
-                          →
-                        </span>
-                      )}
-                    </div>
-                  ))}
+                <div className="rounded-2xl border border-[var(--line)] p-4">
+                  <BridgeChain route={message.route} selfId={undefined} />
                 </div>
               </div>
 

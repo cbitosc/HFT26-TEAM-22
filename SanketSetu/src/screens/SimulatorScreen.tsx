@@ -9,6 +9,7 @@
  */
 
 import React, { useRef, useState } from 'react';
+import { BenchmarkCard } from '../ui/BenchmarkCard';
 import {
   Activity,
   Gauge,
@@ -120,13 +121,13 @@ export function SimulatorScreen() {
     if (runningBenchmark) return;
     setRunningBenchmark(true);
     setStatusBanner(
-      'Running Congestion Benchmark: flooding 8 P2/P3 packets while dispatching a P0 SOS across A→B→C→D...'
+      'Running Congestion Benchmark: flooding 12 normal packets while sending 3 SOS beacons across A→B→C→D...'
     );
     try {
       const res = await runCongestionBenchmark();
       if (res) {
         setStatusBanner(
-          `Benchmark Complete: P0 SOS Latency ${res.sosLatencyMs} ms vs P2 Normal Mean Latency ${res.normalMeanLatencyMs} ms (${res.sosBypassSpeedupFactor}x faster under load).`
+          `Benchmark complete (simulated): SOS p50 ${res.sos.p50Ms ?? 'n/a'} ms, normal p50 ${res.normal.p50Ms ?? 'n/a'} ms.`
         );
       }
     } finally {
@@ -542,41 +543,8 @@ export function SimulatorScreen() {
         </div>
 
         {/* Side-by-side SOS vs Normal Latency Congestion Benchmark Card */}
-        <div className="mb-4 rounded-2xl border border-[var(--line)] bg-[var(--surface-2)] p-3.5">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <span className="font-mono text-xs font-bold text-[var(--fg)]">
-              CONGESTION BENCHMARK · P0 SOS BYPASS VS P2/P3 NORMAL QUEUE
-            </span>
-            <span className="rounded-full bg-[var(--warn-tint)] px-2.5 py-1 text-xs font-bold text-[var(--warn-ink)]">SIMULATED</span>
-          </div>
-
-          {meshQuality.lastBenchmark ? (
-            <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <div className="rounded-xl border border-[var(--accent-coral)]/40 bg-[var(--surface)] p-3">
-                <div className="text-sm font-bold text-[var(--sos-ink)]">SOS · simulated latency</div>
-                <div className="mt-1 font-grotesk text-2xl font-bold text-[var(--fg)]">
-                  {meshQuality.lastBenchmark.sosLatencyMs} ms
-                </div>
-                <div className="mt-1 text-sm text-[var(--fg-secondary)]">
-                  P50/P95 unavailable for this aggregate run.
-                </div>
-              </div>
-
-              <div className="rounded-xl border border-[var(--line)] bg-[var(--surface)] p-3">
-                <div className="text-sm font-bold text-[var(--verified-ink)]">Normal · simulated aggregate</div>
-                <div className="mt-1 font-grotesk text-2xl font-bold text-[var(--fg)]">
-                  {meshQuality.lastBenchmark.normalMeanLatencyMs} ms mean
-                </div>
-                <div className="mt-1 text-sm text-[var(--fg-secondary)]">
-                  {meshQuality.lastBenchmark.floodPacketsCount} background packets · reported max {meshQuality.lastBenchmark.normalMaxLatencyMs} ms. P50/P95 unavailable.
-                </div>
-              </div>
-            </div>
-          ) : (
-            <p className="mt-1.5 font-mono text-xs text-[var(--muted)]">
-              Run the benchmark to compare SOS and normal traffic in this simulator. Values are simulated estimates, not radio measurements; p50 and p95 distributions are not available.
-            </p>
-          )}
+        <div className="mb-4">
+          <BenchmarkCard result={meshQuality.lastBenchmark} />
         </div>
 
         {/* Per-Priority Class (P0..P3) Table */}

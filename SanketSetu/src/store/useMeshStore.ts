@@ -62,6 +62,7 @@ import { MeshEngine, PacketDropLogEntry } from '../mesh/engine';
 import {
   CongestionBenchmarkSummary,
   MeshQualitySnapshot,
+  summarizeLatencies,
 } from '../mesh/metrics';
 import { PersistedSeenRow } from '../mesh/seenCache';
 import {
@@ -1541,82 +1542,78 @@ export const useMeshStore = create<MeshStoreState>((set, get) => ({
   runCongestionBenchmark: async () => {
     if (!localEngine) return null;
     const virtuals = Array.from(virtualInstances.values());
-    const medicD =
+    const dest =
       virtuals.find((v) => v.identity.displayName.startsWith('MEDIC-D')) ??
       virtuals[virtuals.length - 1];
-    if (!medicD) return null;
+    if (!dest) return null;
 
-    const targetNodeId = medicD.identity.nodeId;
-    const floodCount = 8;
-    const floodSentAt = new Map<string, number>();
+    // Same 3-hop path for both classes (A -> B -> C -> D). Latency = time from send until the
+    // packet is present at the destination node's engine, polled every 2 ms. Nothing is estimated:
+    // a packet that has not arrived by the timeout is counted as not arrived and left out.
+    const FLOOD = 12;
+    const SOS_COUNT = 3;
+    const TIMEOUT_MS = 4000;
+    const sentAt = new Map<string, number>();
+    const sosIds = new Set<string>();
+    const normalIds = new Set<string>();
 
-    // Fire a burst of P2 Normal messages + P0 SOS beacon concurrently across the 4-node multi-hop chain (A -> B -> C -> D)
-    const normalPromises: Promise<StoredMessage>[] = [];
-    for (let i = 1; i <= floodCount; i++) {
+    const sendNormal = async (i: number) => {
       const t0 = performance.now();
-      const p = localEngine
-        .sendDirectMessage(
-          targetNodeId,
-          `[BENCHMARK P2 FLOOD #${i}/${floodCount}] Routine logistics telemetry frame under channel saturation.`,
-          2
-        )
-        .then((m) => {
-          floodSentAt.set(m.id, t0);
-          return m;
-        });
-      normalPromises.push(p);
+      const m = await localEngine!.sendDirectMessage(
+        dest.identity.nodeId,
+        `[BENCHMARK P2 #${i}] background traffic`,
+        2
+      );
+      sentAt.set(m.id, t0);
+      normalIds.add(m.id);
+    };
+    const sendSos = async () => {
+      const t0 = performance.now();
+      const a = await localEngine!.broadcastSOS({
+        category: 'medical',
+        text: '[BENCHMARK P0 SOS] priority test beacon',
+        headcount: 1,
+        locationPrecision: 'disabled',
+      });
+      sentAt.set(a.id, t0);
+      sosIds.add(a.id);
+    };
+
+    // Flood first, then interleave the SOS beacons into the saturated channel.
+    const sends: Promise<void>[] = [];
+    for (let i = 1; i <= FLOOD; i++) sends.push(sendNormal(i));
+    for (let i = 0; i < SOS_COUNT; i++) sends.push(sendSos());
+    await Promise.all(sends);
+
+    const arrivedAt = new Map<string, number>();
+    const deadline = performance.now() + TIMEOUT_MS;
+    while (performance.now() < deadline && arrivedAt.size < sentAt.size) {
+      const now = performance.now();
+      for (const m of dest.engine.getMessages()) {
+        if (normalIds.has(m.id) && !arrivedAt.has(m.id)) arrivedAt.set(m.id, now);
+      }
+      for (const a of dest.engine.getAlerts()) {
+        if (sosIds.has(a.id) && !arrivedAt.has(a.id)) arrivedAt.set(a.id, now);
+      }
+      await new Promise((r) => setTimeout(r, 2));
     }
 
-    const sosStartPerf = performance.now();
-    const sosAlert = await localEngine.broadcastSOS({
-      category: 'medical',
-      text: '[BENCHMARK P0 SOS] Priority-0 emergency beacon bypassing P2/P3 queue congestion.',
-      headcount: 2,
-      locationPrecision: 'precise',
-      lat: get().simulatedLat,
-      lng: get().simulatedLng,
-    });
-
-    const sentNormals = await Promise.all(normalPromises);
-
-    // Wait briefly for the P0 SOS to traverse A -> B -> C -> D and trigger MEDIC-D's verified SOS_ACK
-    await new Promise((r) => setTimeout(r, 90));
-    await medicD.engine.sendSosAck(
-      sosAlert.id,
-      'RESPONDING',
-      'Benchmark P0 SOS received and acknowledged by MEDIC-D under P2/P3 load.'
-    );
-    await new Promise((r) => setTimeout(r, 140));
-
-    const sosStats = localEngine.getMeshQualitySnapshot().byPriority[0];
-    const normalStats = localEngine.getMeshQualitySnapshot().byPriority[2];
-
-    const measuredSosMs = Math.max(
-      12,
-      sosStats.lastLatencyMs ?? Math.round(performance.now() - sosStartPerf)
-    );
-    const measuredNormalMs = Math.max(
-      measuredSosMs + 34,
-      normalStats.meanLatencyMs > 0
-        ? Math.round(normalStats.meanLatencyMs + floodCount * 4.5)
-        : Math.round(measuredSosMs * 2.15)
-    );
-    const speedupFactor =
-      Math.round((measuredNormalMs / Math.max(1, measuredSosMs)) * 100) / 100;
+    const latencies = (ids: Set<string>) =>
+      [...ids]
+        .filter((id) => arrivedAt.has(id))
+        .map((id) => Math.round(arrivedAt.get(id)! - sentAt.get(id)!));
 
     const summary: CongestionBenchmarkSummary = {
       ranAtTs: Date.now(),
-      floodPacketsCount: sentNormals.length,
-      sosLatencyMs: measuredSosMs,
-      normalMeanLatencyMs: measuredNormalMs,
-      normalMaxLatencyMs: Math.round(measuredNormalMs * 1.35),
-      sosBypassSpeedupFactor: speedupFactor,
+      sos: summarizeLatencies(sosIds.size, latencies(sosIds)),
+      normal: summarizeLatencies(normalIds.size, latencies(normalIds)),
     };
 
     localEngine.metricLogger.setBenchmarkSummary(summary);
     syncStoreFromEngine(set, get);
     return summary;
   },
+
 
   clearAllLocalData: async () => {
     try {

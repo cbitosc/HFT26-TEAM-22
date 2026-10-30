@@ -9,6 +9,7 @@
 
 import React, { useMemo, useState } from 'react';
 import { ShowMoreButton, usePagedList } from '../ui/paging';
+import { DeliveryBridge } from '../ui/BridgeStatus';
 import { EmptyState } from '../ui/EmptyState';
 import {
   CheckCheck,
@@ -61,39 +62,11 @@ export function MessagesScreen() {
     }
   };
 
-  const renderDeliveryBadge = (msg: StoredMessage) => {
-    switch (msg.deliveryState) {
-      case 'DELIVERED':
-        return (
-          <span className="inline-flex items-center gap-1 rounded-full bg-[var(--accent-blue)] px-2.5 py-0.5 font-mono text-[10px] font-bold text-white">
-            <CheckCheck className="h-3 w-3" />
-            <span>
-              Delivered · {msg.relayedHops} hop{msg.relayedHops === 1 ? '' : 's'}
-            </span>
-          </span>
-        );
-      case 'RELAYED':
-        return (
-          <span className="inline-flex items-center gap-1 rounded-full bg-[var(--accent-lilac)] px-2.5 py-0.5 font-mono text-[10px] font-bold text-[var(--on-fill)]">
-            <Radio className="h-3 w-3" />
-            <span>Relayed · {msg.relayedHops} hops</span>
-          </span>
-        );
-      case 'SENT':
-        return (
-          <span className="inline-flex items-center gap-1 rounded-full bg-[var(--accent-green)] px-2.5 py-0.5 font-mono text-[10px] font-bold text-[var(--on-fill)]">
-            <span>Sent</span>
-          </span>
-        );
-      default:
-        return (
-          <span className="inline-flex items-center gap-1 rounded-full border border-[var(--line)] bg-[var(--surface)] px-2.5 py-0.5 font-mono text-[10px] font-bold text-[var(--muted)]">
-            <Clock className="h-3 w-3" />
-            <span>Pending · queued</span>
-          </span>
-        );
-    }
-  };
+  const renderDeliveryBadge = (msg: StoredMessage) => (
+    <div className="w-full max-w-[220px]">
+      <DeliveryBridge state={msg.deliveryState} hops={msg.relayedHops} compact />
+    </div>
+  );
 
   return (
     <section className="mx-auto w-full max-w-5xl px-4 pt-2 pb-28 sm:px-6">

@@ -44,6 +44,9 @@ const SimulatorScreen = lazy(() =>
 const AIAssistantScreen = lazy(() =>
   import('./screens/AIAssistantScreen').then((m) => ({ default: m.AIAssistantScreen }))
 );
+const MeshQualityScreen = lazy(() =>
+  import('./screens/MeshQualityScreen').then((m) => ({ default: m.MeshQualityScreen }))
+);
 const SettingsScreen = lazy(() =>
   import('./screens/SettingsScreen').then((m) => ({ default: m.SettingsScreen }))
 );
@@ -70,6 +73,7 @@ function resolveScreenFromHash(hash: string): AppScreenId | null {
     'map',
     'ai',
     'simulator',
+    'quality',
     'settings',
     'onboarding',
   ];
@@ -214,6 +218,7 @@ export default function App() {
             <MeshMapScreen onNavigate={handleNavigate} />
           )}
           {activeScreen === 'simulator' && <SimulatorScreen />}
+          {activeScreen === 'quality' && <MeshQualityScreen />}
           {activeScreen === 'ai' && <AIAssistantScreen />}
           {activeScreen === 'settings' && <SettingsScreen />}
         </Suspense>

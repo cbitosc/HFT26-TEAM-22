@@ -106,3 +106,24 @@ test('25. P0 SOS dequeues before a flood of P2/P3 and is never evicted at capaci
   assert.equal(q.enqueue({ packet: makePacket('s'.padEnd(32, '0'), 'SOS', 0), targetPeerId: 'ALL_EXCEPT_SENDER', enqueuedAt: 99 }), true);
   assert.equal(q.dequeue()?.packet.type, 'SOS');
 });
+
+import { distanceMeters, withinRadius } from '../src/lib/geo';
+
+test('26. Geo: 200 m incident radius separates nearby and far reports; missing coordinates never cluster', () => {
+  assert.ok(Math.abs(distanceMeters(12.97, 77.59, 12.97, 77.59)) < 0.001);
+  const base = { lat: 12.9716, lng: 77.5946 };
+  assert.equal(withinRadius(base, { lat: 12.9724, lng: 77.5946 }), true); // ~89 m
+  assert.equal(withinRadius(base, { lat: 12.9745, lng: 77.5946 }), false); // ~320 m
+  assert.equal(withinRadius(base, { lat: undefined, lng: undefined }), false);
+});
+
+import { percentile, summarizeLatencies } from '../src/mesh/metrics';
+
+test('27. Benchmark stats: nearest-rank p50/p95, empty input gives null, unarrived packets are counted not invented', () => {
+  const samples = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100];
+  assert.equal(percentile(samples, 50), 50);
+  assert.equal(percentile(samples, 95), 100);
+  assert.equal(percentile([], 50), null);
+  assert.deepEqual(summarizeLatencies(5, [30, 10, 20]), { sent: 5, arrived: 3, p50Ms: 20, p95Ms: 30 });
+  assert.deepEqual(summarizeLatencies(3, []), { sent: 3, arrived: 0, p50Ms: null, p95Ms: null });
+});
