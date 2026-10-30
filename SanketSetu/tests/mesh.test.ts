@@ -2,8 +2,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   decryptIdentityWithPin,
+  decryptSecretKeysWithVaultKey,
   encryptIdentityWithPin,
+  encryptSecretKeysWithVaultKey,
   generateNodeIdentity,
+  generateVaultKeyB64,
+  mergeIdentityFromStorage,
+  splitIdentityForStorage,
   utf8ToBytes,
 } from '../src/crypto/identity';
 import { signPacket, verifyPacketSignature } from '../src/crypto/sign';
@@ -925,5 +930,30 @@ test('15. Active Jitter & Overhear Suppression Cancellation: hearing packet from
 
   await engineRelay.stop();
   await engineObserver.stop();
+});
+
+test('16. Identity Vault: secret keys never leave storage in plaintext, round-trip correctly, and the wrong vault key fails', () => {
+  const id = generateNodeIdentity('Vault-Node');
+  const { publicPart, secretPart } = splitIdentityForStorage(id);
+
+  // The public part must never carry the secret keys.
+  assert.equal((publicPart as Record<string, unknown>).signSecretKeyB64, undefined);
+  assert.equal((publicPart as Record<string, unknown>).boxSecretKeyB64, undefined);
+
+  const vaultKeyB64 = generateVaultKeyB64();
+  const encrypted = encryptSecretKeysWithVaultKey(secretPart, vaultKeyB64);
+
+  // Ciphertext must not contain the raw secret key material.
+  assert.equal(encrypted.ciphertextB64.includes(id.signSecretKeyB64), false);
+  assert.equal(encrypted.ciphertextB64.includes(id.boxSecretKeyB64), false);
+
+  const decrypted = decryptSecretKeysWithVaultKey(encrypted, vaultKeyB64);
+  assert.ok(decrypted);
+  const restored = mergeIdentityFromStorage(publicPart, decrypted!);
+  assert.deepEqual(restored, id);
+
+  // A different vault key must fail to open it.
+  const wrongKey = generateVaultKeyB64();
+  assert.equal(decryptSecretKeysWithVaultKey(encrypted, wrongKey), null);
 });
 

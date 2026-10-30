@@ -12,6 +12,7 @@ import {
   StoredSOSAlert,
 } from '../mesh/types';
 import { PersistedSeenRow } from '../mesh/seenCache';
+import { generateVaultKeyB64 } from '../crypto/identity';
 
 export interface KeyValueRow {
   key: string;
@@ -76,6 +77,18 @@ export async function saveKvJson<T>(key: string, value: T): Promise<void> {
       // ignore
     }
   }
+}
+
+/**
+ * Returns this device's local identity vault key, generating and persisting one on first use.
+ * See `crypto/identity.ts` for what this key protects (and what it does not).
+ */
+export async function getOrCreateLocalVaultKey(): Promise<string> {
+  const existing = await loadKvJson<string>('local_vault_key_b64');
+  if (existing) return existing;
+  const fresh = generateVaultKeyB64();
+  await saveKvJson('local_vault_key_b64', fresh);
+  return fresh;
 }
 
 export async function loadKvJson<T>(key: string): Promise<T | null> {

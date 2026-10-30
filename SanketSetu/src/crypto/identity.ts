@@ -172,3 +172,84 @@ export function decryptIdentityWithPin(
     return null;
   }
 }
+
+/**
+ * Local Identity Vault (never store raw Ed25519/X25519 secret keys unencrypted)
+ * -------------------------------------------------------------------------
+ * `NodeIdentity` is split for storage into:
+ * - A `PublicIdentity` part (node ID, display name, public keys) — safe to persist in plaintext,
+ *   needed to render the UI before the vault is available.
+ * - A `SecretKeysBlob` (the two secret keys) — ALWAYS persisted encrypted via `nacl.secretbox`
+ *   under a random 256-bit local vault key (`generateVaultKeyB64`), never in plaintext.
+ * The vault key itself is device-local storage (see `db/dexie.ts`), so this protects against
+ * accidental plaintext exposure (exports, screenshots, casual DB inspection) but — like any
+ * key stored on the same device as its ciphertext — does NOT protect against an attacker with
+ * full local filesystem/IndexedDB access. When the user sets a PIN, a second, portable copy is
+ * additionally encrypted with `encryptIdentityWithPin` for future cross-device recovery; see
+ * docs/SECURITY.md for the full threat model.
+ */
+export type PublicIdentity = Omit<
+  NodeIdentity,
+  'signSecretKeyB64' | 'boxSecretKeyB64'
+>;
+
+export interface SecretKeysBlob {
+  signSecretKeyB64: string;
+  boxSecretKeyB64: string;
+}
+
+export function generateVaultKeyB64(): string {
+  return bytesToBase64(nacl.randomBytes(nacl.secretbox.keyLength));
+}
+
+export function splitIdentityForStorage(identity: NodeIdentity): {
+  publicPart: PublicIdentity;
+  secretPart: SecretKeysBlob;
+} {
+  const { signSecretKeyB64, boxSecretKeyB64, ...publicPart } = identity;
+  return { publicPart, secretPart: { signSecretKeyB64, boxSecretKeyB64 } };
+}
+
+export function mergeIdentityFromStorage(
+  publicPart: PublicIdentity,
+  secretPart: SecretKeysBlob
+): NodeIdentity {
+  return { ...publicPart, ...secretPart };
+}
+
+/**
+ * Encrypts the two secret keys with the device-local vault key (no PBKDF stretch needed —
+ * the vault key is already a uniformly random 256-bit value, not a low-entropy PIN).
+ */
+export function encryptSecretKeysWithVaultKey(
+  secrets: SecretKeysBlob,
+  vaultKeyB64: string
+): EncryptedKeystoreBlob {
+  const key = base64ToBytes(vaultKeyB64);
+  const nonce = nacl.randomBytes(nacl.secretbox.nonceLength);
+  const plaintext = utf8ToBytes(JSON.stringify(secrets));
+  const ciphertext = nacl.secretbox(plaintext, nonce, key);
+
+  return {
+    v: 1,
+    saltB64: '',
+    nonceB64: bytesToBase64(nonce),
+    ciphertextB64: bytesToBase64(ciphertext),
+  };
+}
+
+export function decryptSecretKeysWithVaultKey(
+  blob: EncryptedKeystoreBlob,
+  vaultKeyB64: string
+): SecretKeysBlob | null {
+  try {
+    const key = base64ToBytes(vaultKeyB64);
+    const nonce = base64ToBytes(blob.nonceB64);
+    const ciphertext = base64ToBytes(blob.ciphertextB64);
+    const opened = nacl.secretbox.open(ciphertext, nonce, key);
+    if (!opened) return null;
+    return JSON.parse(bytesToUtf8(opened)) as SecretKeysBlob;
+  } catch {
+    return null;
+  }
+}

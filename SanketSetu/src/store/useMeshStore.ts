@@ -24,9 +24,14 @@ import {
   StoredSOSAlert,
 } from '../mesh/types';
 import {
+  decryptSecretKeysWithVaultKey,
   encryptIdentityWithPin,
+  encryptSecretKeysWithVaultKey,
   generateNodeIdentity,
+  mergeIdentityFromStorage,
   NodeIdentity,
+  PublicIdentity,
+  splitIdentityForStorage,
 } from '../crypto/identity';
 import { decodeTrustQrUri, encodeTrustQrUri } from '../crypto/qr';
 import {
@@ -49,6 +54,7 @@ import {
   MeshQualitySnapshot,
 } from '../mesh/metrics';
 import {
+  getOrCreateLocalVaultKey,
   loadKvJson,
   loadUnexpiredSeenEntries,
   persistSeenEntry,
@@ -218,6 +224,55 @@ const simController = new SimNetworkController();
 let localEngine: MeshEngine | null = null;
 let nativeNearbyTransport: NearbyTransport | null = null;
 const virtualInstances = new Map<string, VirtualPeerInstance>();
+
+/**
+ * Persists a NodeIdentity split as public fields (plaintext) + secret keys (always
+ * nacl.secretbox-encrypted under the device-local vault key). Never writes raw secret
+ * keys to storage. See `crypto/identity.ts` for the threat model.
+ */
+async function persistIdentity(identity: NodeIdentity): Promise<void> {
+  const vaultKeyB64 = await getOrCreateLocalVaultKey();
+  const { publicPart, secretPart } = splitIdentityForStorage(identity);
+  const encryptedSecrets = encryptSecretKeysWithVaultKey(secretPart, vaultKeyB64);
+  await saveKvJson('node_identity_public', publicPart);
+  await saveKvJson('node_identity_secret_enc', encryptedSecrets);
+}
+
+/**
+ * Loads a previously persisted identity, decrypting its secret keys with the device vault
+ * key. Transparently migrates the legacy plaintext `node_identity` entry (pre-vault builds)
+ * on first load, then deletes it.
+ */
+async function loadPersistedIdentity(): Promise<NodeIdentity | null> {
+  const publicPart = await loadKvJson<PublicIdentity>('node_identity_public');
+  const encryptedSecrets = await loadKvJson<ReturnType<
+    typeof encryptSecretKeysWithVaultKey
+  >>('node_identity_secret_enc');
+
+  if (publicPart && encryptedSecrets) {
+    const vaultKeyB64 = await getOrCreateLocalVaultKey();
+    const secretPart = decryptSecretKeysWithVaultKey(encryptedSecrets, vaultKeyB64);
+    if (secretPart) {
+      return mergeIdentityFromStorage(publicPart, secretPart);
+    }
+  }
+
+  // Legacy migration: older builds stored the full identity (incl. secret keys) in
+  // plaintext under `node_identity`. If present, split/encrypt it into the vault scheme
+  // and remove the plaintext copy.
+  const legacyIdentity = await loadKvJson<NodeIdentity>('node_identity');
+  if (legacyIdentity) {
+    await persistIdentity(legacyIdentity);
+    try {
+      await sanketDb.kv.delete('node_identity');
+    } catch {
+      // ignore
+    }
+    return legacyIdentity;
+  }
+
+  return null;
+}
 
 function buildUpdatedCircles(
   existingCircles: SafetyCircle[],
@@ -665,7 +720,7 @@ export const useMeshStore = create<MeshStoreState>((set, get) => ({
       syncStoreFromEngine(set, get);
     });
 
-    const savedIdentity = await loadKvJson<NodeIdentity>('node_identity');
+    const savedIdentity = await loadPersistedIdentity();
     const savedOnboarding = await loadKvJson<boolean>('onboarding_done');
     const savedAiKey = await loadKvJson<string>('featherless_api_key');
     const savedAiModel = await loadKvJson<string>('featherless_model');
@@ -673,7 +728,7 @@ export const useMeshStore = create<MeshStoreState>((set, get) => ({
 
     const activeIdentity = savedIdentity ?? get().identity;
     if (!savedIdentity) {
-      await saveKvJson('node_identity', activeIdentity);
+      await persistIdentity(activeIdentity);
     }
 
     set({
@@ -700,9 +755,13 @@ export const useMeshStore = create<MeshStoreState>((set, get) => ({
       displayName: cleanName,
     };
 
-    await saveKvJson('node_identity', updatedIdentity);
+    await persistIdentity(updatedIdentity);
     await saveKvJson('onboarding_done', true);
 
+    // The running app always unlocks via the device-local vault key (see persistIdentity
+    // above) — there is no PIN-unlock screen yet. When a PIN is set, we additionally keep a
+    // portable PIN-encrypted copy for future cross-device recovery (not yet wired to a
+    // restore flow); this does not change what protects the identity on THIS device.
     let pinEncrypted = false;
     if (pin && pin.trim().length >= 4) {
       const blob = encryptIdentityWithPin(updatedIdentity, pin.trim());
@@ -736,7 +795,7 @@ export const useMeshStore = create<MeshStoreState>((set, get) => ({
   setDisplayName: async (name: string) => {
     const clean = name.trim() || get().identity.displayName;
     const updated: NodeIdentity = { ...get().identity, displayName: clean };
-    await saveKvJson('node_identity', updated);
+    await persistIdentity(updated);
     if (localEngine) {
       localEngine.identity.displayName = clean;
       await localEngine.broadcastHello();
@@ -1290,7 +1349,7 @@ export const useMeshStore = create<MeshStoreState>((set, get) => ({
       // ignore
     }
     const freshId = generateNodeIdentity('SANKET-A (You)');
-    await saveKvJson('node_identity', freshId);
+    await persistIdentity(freshId);
     set({
       identity: freshId,
       activeSosId: null,
