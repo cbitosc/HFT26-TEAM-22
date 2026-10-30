@@ -2,15 +2,19 @@ package org.sanket.mesh
 
 import android.Manifest
 import android.content.Intent
+import android.net.Uri
 import android.os.Build
+import android.provider.Settings
 import android.util.Base64
 import com.getcapacitor.JSArray
 import com.getcapacitor.JSObject
+import com.getcapacitor.PermissionState
 import com.getcapacitor.Plugin
 import com.getcapacitor.PluginCall
 import com.getcapacitor.PluginMethod
 import com.getcapacitor.annotation.CapacitorPlugin
 import com.getcapacitor.annotation.Permission
+import com.getcapacitor.annotation.PermissionCallback
 import com.google.android.gms.nearby.Nearby
 import com.google.android.gms.nearby.connection.AdvertisingOptions
 import com.google.android.gms.nearby.connection.ConnectionInfo
@@ -210,6 +214,10 @@ class NearbyMeshPlugin : Plugin(), ConnectionManager.Listener {
 
     @PluginMethod
     fun startAdvertising(call: PluginCall) {
+        if (!hasAllRequiredMeshPermissions()) {
+            call.reject("Required permissions not granted. Call ensureMeshPermissions() first.")
+            return
+        }
         localNodeId = call.getString("nodeId") ?: ""
         localDisplayName = call.getString("displayName") ?: "SANKET-NODE"
         serviceId = call.getString("serviceId") ?: serviceId
@@ -234,6 +242,10 @@ class NearbyMeshPlugin : Plugin(), ConnectionManager.Listener {
 
     @PluginMethod
     fun startDiscovery(call: PluginCall) {
+        if (!hasAllRequiredMeshPermissions()) {
+            call.reject("Required permissions not granted. Call ensureMeshPermissions() first.")
+            return
+        }
         serviceId = call.getString("serviceId") ?: serviceId
 
         val options = DiscoveryOptions.Builder()
@@ -313,6 +325,82 @@ class NearbyMeshPlugin : Plugin(), ConnectionManager.Listener {
             item = pendingPayloadRing.poll()
         }
         call.resolve(JSObject().put("payloads", array))
+    }
+
+    // --- Runtime permissions ----------------------------------------------------------------
+    //
+    // The exact set of OS permissions actually required depends on API level: BLUETOOTH_SCAN/
+    // ADVERTISE/CONNECT only exist from API 31 (Android 12); on older OS versions, Bluetooth
+    // discovery instead required ACCESS_FINE_LOCATION, which we request unconditionally anyway
+    // (it's also used for opt-in precise SOS coordinates at the app level, independent of the
+    // mesh transport). NEARBY_WIFI_DEVICES only exists from API 33, as does POST_NOTIFICATIONS.
+    // Requesting an alias whose underlying permission doesn't apply to the current OS version is
+    // a harmless no-op in Capacitor's permission helper, but we compute the precise required set
+    // anyway so `permissionState` accurately reflects what THIS device actually needs.
+
+    private fun requiredPermissionAliasesForSdk(): Array<String> {
+        val aliases = mutableListOf("fineLocation")
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) { // API 31
+            aliases.add("bluetoothScan")
+            aliases.add("bluetoothAdvertise")
+            aliases.add("bluetoothConnect")
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) { // API 33
+            aliases.add("nearbyWifi")
+            aliases.add("notifications")
+        }
+        return aliases.toTypedArray()
+    }
+
+    private fun hasAllRequiredMeshPermissions(): Boolean {
+        return requiredPermissionAliasesForSdk().all { getPermissionState(it) == PermissionState.GRANTED }
+    }
+
+    private fun permissionStateResult(): JSObject {
+        val result = JSObject()
+        var allGranted = true
+        for (alias in requiredPermissionAliasesForSdk()) {
+            val granted = getPermissionState(alias) == PermissionState.GRANTED
+            result.put(alias, granted)
+            if (!granted) allGranted = false
+        }
+        result.put("allGranted", allGranted)
+        result.put("sdkInt", Build.VERSION.SDK_INT)
+        return result
+    }
+
+    /**
+     * Returns current grant state for exactly the permission aliases this device's API level
+     * actually needs for Nearby Connections, without prompting. Call this first; only call
+     * [requestMeshPermissions] if it reports `allGranted: false` and the user has confirmed a
+     * rationale screen (required by Play policy for runtime permission requests).
+     */
+    @PluginMethod
+    fun checkMeshPermissions(call: PluginCall) {
+        call.resolve(permissionStateResult())
+    }
+
+    /** Triggers the OS runtime permission dialog(s) for exactly the aliases this device needs. */
+    @PluginMethod
+    fun requestMeshPermissions(call: PluginCall) {
+        requestPermissionForAliases(requiredPermissionAliasesForSdk(), call, "onMeshPermissionsResult")
+    }
+
+    @PermissionCallback
+    private fun onMeshPermissionsResult(call: PluginCall) {
+        val result = permissionStateResult()
+        notifyListeners("permissionState", result)
+        call.resolve(result)
+    }
+
+    /** Opens this app's system Settings page, for the denial UI's "Open Settings" action. */
+    @PluginMethod
+    fun openAppSettings(call: PluginCall) {
+        val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+            data = Uri.fromParts("package", context.packageName, null)
+        }
+        context.startActivity(intent)
+        call.resolve()
     }
 
     @PluginMethod

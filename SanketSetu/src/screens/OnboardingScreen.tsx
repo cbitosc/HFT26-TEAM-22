@@ -7,12 +7,15 @@
  * - Selects language, initial power mode, and optional Featherless AI key
  */
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { Capacitor } from '@capacitor/core';
 import {
   CheckCircle2,
+  ExternalLink,
   KeyRound,
   Lock,
   Radio,
+  ShieldAlert,
   ShieldCheck,
   Smartphone,
 } from 'lucide-react';
@@ -24,10 +27,27 @@ import {
 } from '../content';
 import { useMeshStore } from '../store/useMeshStore';
 import { PowerMode } from '../mesh/types';
+import { MeshPermissionState } from '../transport/NearbyTransport';
 
 interface OnboardingScreenProps {
   onCompleteNavigate: (screen: AppScreenId) => void;
 }
+
+/**
+ * Maps this UI's permission-list ids to the real native permission-state keys returned by
+ * NearbyMeshPlugin. Ids with no entry here aren't runtime-requestable: `fg-service`
+ * (FOREGROUND_SERVICE) is a normal manifest permission granted at install time, and
+ * `camera-qr` has no QR-scan feature wired up yet.
+ */
+const PERMISSION_ID_TO_STATE_KEY: Partial<
+  Record<string, keyof MeshPermissionState>
+> = {
+  'bt-scan': 'bluetoothScan',
+  'bt-advertise': 'bluetoothAdvertise',
+  'bt-connect': 'bluetoothConnect',
+  'nearby-wifi': 'nearbyWifi',
+  'fine-location': 'fineLocation',
+};
 
 export function OnboardingScreen({
   onCompleteNavigate,
@@ -37,20 +57,33 @@ export function OnboardingScreen({
   const metrics = useMeshStore((s) => s.metrics);
   const featherlessApiKey = useMeshStore((s) => s.featherlessApiKey);
   const completeOnboarding = useMeshStore((s) => s.completeOnboarding);
+  const permissionState = useMeshStore((s) => s.permissionState);
+  const checkMeshPermissions = useMeshStore((s) => s.checkMeshPermissions);
+  const requestMeshPermissions = useMeshStore((s) => s.requestMeshPermissions);
+  const openAppSettings = useMeshStore((s) => s.openAppSettings);
 
   const [displayName, setDisplayName] = useState(identity.displayName);
   const [pin, setPin] = useState('');
   const [language, setLanguage] = useState(currentLang);
   const [powerMode, setPowerMode] = useState<PowerMode>(metrics.powerMode);
   const [aiKey, setAiKey] = useState(featherlessApiKey);
-  const [grantedPerms, setGrantedPerms] = useState<Record<string, boolean>>({
-    'bt-scan': true,
-    'bt-advertise': true,
-    'bt-connect': true,
-    'nearby-wifi': true,
-    'fine-location': false,
-    'fg-service': true,
-  });
+  const [requesting, setRequesting] = useState(false);
+  const isNative = Capacitor.isNativePlatform();
+
+  useEffect(() => {
+    if (isNative) {
+      void checkMeshPermissions();
+    }
+  }, [isNative, checkMeshPermissions]);
+
+  const handleGrantAccess = async () => {
+    setRequesting(true);
+    try {
+      await requestMeshPermissions();
+    } finally {
+      setRequesting(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -151,33 +184,41 @@ export function OnboardingScreen({
           </div>
         </div>
 
-        {/* 2. Android Nearby Mesh Permissions Explainer */}
+        {/* 2. Android Nearby Mesh Permissions — real OS grant state on native, explainer-only in browser */}
         <div className="nova-card p-5">
           <div className="mb-3 flex items-center gap-2">
             <Smartphone className="h-5 w-5 text-[var(--accent-lilac)]" />
             <h2 className="font-grotesk text-lg font-bold text-[var(--fg)] lowercase">
-              02. android p2p_cluster permissions explainer
+              02. android p2p_cluster permissions
             </h2>
           </div>
           <p className="mb-4 text-sm text-[var(--muted)]">
             Sanket uses Google Nearby Connections (Bluetooth + BLE + Wi-Fi Direct) to form an offline mesh. Location is strictly optional and never sent silently.
           </p>
 
+          {!isNative && (
+            <p className="mb-4 rounded-xl border border-[var(--line)] bg-[var(--surface-2)] p-3 text-xs text-[var(--muted)]">
+              Running in the browser preview — Android doesn't prompt for these here. Status below reflects what will be requested when this is installed as an Android app.
+            </p>
+          )}
+
           <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
             {ANDROID_PERMISSIONS_LIST.map((perm) => {
-              const checked = Boolean(grantedPerms[perm.id]);
+              const stateKey = PERMISSION_ID_TO_STATE_KEY[perm.id];
+              // fg-service is a manifest (install-time) permission, not runtime-requestable —
+              // always effectively granted. Unmapped ids (camera-qr) have no feature wired up yet.
+              const granted = !isNative
+                ? false
+                : stateKey
+                  ? Boolean(permissionState?.[stateKey])
+                  : perm.id === 'fg-service';
+              const applicable =
+                stateKey === undefined || permissionState?.[stateKey] !== undefined || perm.id === 'fg-service';
               return (
-                <button
+                <div
                   key={perm.id}
-                  type="button"
-                  onClick={() =>
-                    setGrantedPerms((prev) => ({
-                      ...prev,
-                      [perm.id]: !prev[perm.id],
-                    }))
-                  }
-                  className={`flex min-h-[68px] cursor-pointer items-start justify-between gap-3 rounded-2xl border p-3.5 text-left transition-colors ${
-                    checked
+                  className={`flex min-h-[68px] items-start justify-between gap-3 rounded-2xl border p-3.5 text-left ${
+                    granted
                       ? 'border-[var(--fg)]/35 bg-[var(--surface-2)]'
                       : 'border-[var(--line)] bg-[var(--surface)] opacity-75'
                   }`}
@@ -200,18 +241,53 @@ export function OnboardingScreen({
                     <p className="mt-1 text-xs leading-snug text-[var(--muted)]">
                       {perm.purpose}
                     </p>
+                    {isNative && !applicable && (
+                      <p className="mt-1 text-[10px] uppercase text-[var(--muted)]">
+                        not applicable on this Android version
+                      </p>
+                    )}
                   </div>
                   <CheckCircle2
                     className={`h-5 w-5 shrink-0 ${
-                      checked
-                        ? 'text-[var(--accent-blue)]'
-                        : 'text-[var(--muted)]/40'
+                      granted ? 'text-[var(--accent-blue)]' : 'text-[var(--muted)]/40'
                     }`}
                   />
-                </button>
+                </div>
               );
             })}
           </div>
+
+          {isNative && (
+            <div className="mt-4 flex flex-col gap-2.5">
+              {permissionState && !permissionState.allGranted && (
+                <div className="flex items-start gap-2 rounded-xl border border-[var(--accent-coral)]/40 bg-[var(--accent-coral)]/10 p-3 text-xs text-[var(--fg)]">
+                  <ShieldAlert className="h-4 w-4 shrink-0 text-[var(--accent-coral)]" />
+                  <span>
+                    Some permissions are denied. The app still works — you'll see the simulated demo mesh — but it can't reach real nearby phones until core mesh permissions above are granted.
+                  </span>
+                </div>
+              )}
+              <div className="flex flex-wrap gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => void handleGrantAccess()}
+                  disabled={requesting}
+                  className="flex min-h-[48px] items-center gap-2 rounded-full bg-[var(--accent-lilac)] px-5 text-sm font-bold text-[#0B0B0B] disabled:opacity-60"
+                >
+                  <ShieldCheck className="h-4 w-4" />
+                  {requesting ? 'requesting…' : 'grant access'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void openAppSettings()}
+                  className="flex min-h-[48px] items-center gap-2 rounded-full border border-[var(--line)] px-5 text-sm font-bold text-[var(--fg)]"
+                >
+                  <ExternalLink className="h-4 w-4" />
+                  open settings
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* 3. Power Mode & Language Selection */}

@@ -48,7 +48,11 @@ import {
   SimNodePosition,
   SimTransport,
 } from '../transport/SimTransport';
-import { NearbyTransport } from '../transport/NearbyTransport';
+import {
+  MeshPermissionState,
+  NearbyMeshNative,
+  NearbyTransport,
+} from '../transport/NearbyTransport';
 import { CompositeTransport } from '../transport/CompositeTransport';
 import { Transport } from '../transport/Transport';
 import { MeshEngine, PacketDropLogEntry } from '../mesh/engine';
@@ -94,6 +98,13 @@ export interface MeshStoreState {
   featherlessModel: string;
   aiPrivacyAccepted: boolean;
   isOnline: boolean;
+
+  // Runtime Permissions (native Android only; null until the first check runs)
+  permissionState: MeshPermissionState | null;
+  permissionGateDismissed: boolean;
+
+  /** Count of peers currently connected over the real Nearby Connections radio (0 off native, or with no real peers in range). */
+  realRadioPeerCount: number;
 
   // Live Mesh State
   peers: PeerNode[];
@@ -221,6 +232,14 @@ export interface MeshStoreState {
   ) => Promise<void>;
   runCongestionBenchmark: () => Promise<CongestionBenchmarkSummary | null>;
   clearAllLocalData: () => Promise<void>;
+
+  /** Queries current OS permission grant state (no prompt). No-op off native Android. */
+  checkMeshPermissions: () => Promise<void>;
+  /** Triggers the OS runtime permission dialog(s). Show a rationale screen before calling this. */
+  requestMeshPermissions: () => Promise<void>;
+  /** Opens this app's system Settings page. */
+  openAppSettings: () => Promise<void>;
+  dismissPermissionGate: () => void;
 }
 
 const simController = new SimNetworkController();
@@ -391,6 +410,11 @@ function syncStoreFromEngine(
     simRadioRange: simController.getRadioRange(),
     simLatencyMs: simController.getLatencyMs(),
     simPacketLossPct: simController.getPacketLossPct(),
+    // Truthful "REAL RADIO" signal: at least one peer is currently connected over the actual
+    // Nearby Connections transport, not just the always-present in-memory demo mesh. Checked
+    // directly against NearbyTransport's own peer list rather than inferred, so this can never
+    // claim real radio connectivity that isn't actually there.
+    realRadioPeerCount: nativeNearbyTransport?.getPeers().length ?? 0,
   });
 }
 
@@ -436,8 +460,17 @@ async function setupDefaultFourNodeChain(
   if (Capacitor.isNativePlatform()) {
     nativeNearbyTransport = new NearbyTransport(userIdentity.nodeId, userIdentity.displayName);
     engineTransport = new CompositeTransport([nativeNearbyTransport, userSimTransport]);
+    // eslint-disable-next-line no-console
+    console.info(
+      '[SanketMesh] Transport: CompositeTransport (NearbyTransport = REAL RADIO + SimTransport = SIMULATED demo mesh). ' +
+        'Real-radio peer connectivity depends on Nearby permissions being granted — see the top bar / Settings for live status.'
+    );
   } else {
     nativeNearbyTransport = null;
+    // eslint-disable-next-line no-console
+    console.info(
+      '[SanketMesh] Transport: SimTransport only (SIMULATED). No native bridge in a browser — this is expected, not an error.'
+    );
   }
 
   localEngine = new MeshEngine({
@@ -608,6 +641,10 @@ export const useMeshStore = create<MeshStoreState>((set, get) => ({
   aiPrivacyAccepted: false,
   isOnline: typeof navigator !== 'undefined' ? navigator.onLine : false,
 
+  permissionState: null,
+  permissionGateDismissed: false,
+  realRadioPeerCount: 0,
+
   peers: [],
   messages: [],
   alerts: [],
@@ -720,6 +757,17 @@ export const useMeshStore = create<MeshStoreState>((set, get) => ({
       const updateOnline = () => set({ isOnline: navigator.onLine });
       window.addEventListener('online', updateOnline);
       window.addEventListener('offline', updateOnline);
+    }
+
+    if (Capacitor.isNativePlatform()) {
+      void get().checkMeshPermissions();
+      try {
+        await NearbyMeshNative.addListener('permissionState', (state) => {
+          set({ permissionState: state });
+        });
+      } catch {
+        // ignore
+      }
     }
 
     simController.onTransmission((ev) => {
@@ -1370,4 +1418,41 @@ export const useMeshStore = create<MeshStoreState>((set, get) => ({
     });
     await setupDefaultFourNodeChain(freshId, set, get);
   },
+
+  checkMeshPermissions: async () => {
+    if (!Capacitor.isNativePlatform()) return;
+    try {
+      const state = await NearbyMeshNative.checkMeshPermissions();
+      set({ permissionState: state });
+    } catch {
+      // Plugin not available (shouldn't happen on native, but never block the app over this).
+    }
+  },
+
+  requestMeshPermissions: async () => {
+    if (!Capacitor.isNativePlatform()) return;
+    try {
+      const state = await NearbyMeshNative.requestMeshPermissions();
+      set({ permissionState: state });
+      if (state.allGranted) {
+        // The initial NearbyTransport.start() call may have no-op'd internally if permissions
+        // weren't granted yet (the native plugin now rejects startAdvertising/startDiscovery
+        // without them) — retry now that they are.
+        void nativeNearbyTransport?.start();
+      }
+    } catch {
+      // ignore
+    }
+  },
+
+  openAppSettings: async () => {
+    if (!Capacitor.isNativePlatform()) return;
+    try {
+      await NearbyMeshNative.openAppSettings();
+    } catch {
+      // ignore
+    }
+  },
+
+  dismissPermissionGate: () => set({ permissionGateDismissed: true }),
 }));

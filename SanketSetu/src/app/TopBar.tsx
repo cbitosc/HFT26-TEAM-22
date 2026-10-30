@@ -44,9 +44,14 @@ export function TopBar({
   const outbox = useMeshStore((s) => s.outbox);
   const metrics = useMeshStore((s) => s.metrics);
   const activeSosId = useMeshStore((s) => s.activeSosId);
+  const realRadioPeerCount = useMeshStore((s) => s.realRadioPeerCount);
 
   const directNeighbors = peers.filter((p) => p.isDirectNeighbor).length;
   const totalKnownPeers = peers.length;
+  // Truthful, not aspirational: only ever says REAL RADIO when a Nearby Connections peer is
+  // actually connected right now. Everything else (browser, native with 0 real peers, denied
+  // permissions) honestly shows SIMULATED, since that's what's actually carrying the traffic.
+  const hasRealRadio = realRadioPeerCount > 0;
 
   return (
     <header className="sticky top-0 z-50 w-full px-3 pt-2.5 pb-2 sm:px-6">
@@ -93,8 +98,19 @@ export function TopBar({
             <span>
               {directNeighbors} direct / {totalKnownPeers} mesh peers
             </span>
-            <span className="rounded bg-[var(--surface)] px-1.5 py-0.5 text-[9px] font-semibold text-[var(--muted)]">
-              {sanketContent.simulatedBadge}
+            <span
+              className={`rounded px-1.5 py-0.5 text-[9px] font-semibold ${
+                hasRealRadio
+                  ? 'bg-[var(--accent-green)] text-[#0B0B0B]'
+                  : 'bg-[var(--surface)] text-[var(--muted)]'
+              }`}
+              title={
+                hasRealRadio
+                  ? `${realRadioPeerCount} peer(s) connected over the real Nearby Connections radio`
+                  : 'No real-radio peers connected — showing the in-memory demo mesh only'
+              }
+            >
+              {hasRealRadio ? 'REAL RADIO' : sanketContent.simulatedBadge}
             </span>
           </button>
 

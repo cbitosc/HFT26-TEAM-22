@@ -25,6 +25,23 @@ export interface FanOutLimitEvent {
   ts: number;
 }
 
+/**
+ * Per-alias grant state for exactly the OS permissions this device's API level needs for Nearby
+ * Connections (varies: BLUETOOTH_SCAN/ADVERTISE/CONNECT only exist from API 31, NEARBY_WIFI_DEVICES
+ * and POST_NOTIFICATIONS only from API 33). Aliases not applicable to this device are simply
+ * absent from the object rather than reported as denied.
+ */
+export interface MeshPermissionState {
+  fineLocation?: boolean;
+  bluetoothScan?: boolean;
+  bluetoothAdvertise?: boolean;
+  bluetoothConnect?: boolean;
+  nearbyWifi?: boolean;
+  notifications?: boolean;
+  allGranted: boolean;
+  sdkInt: number;
+}
+
 export interface NearbyMeshPluginInterface {
   startAdvertising(options: {
     nodeId: string;
@@ -51,6 +68,16 @@ export interface NearbyMeshPluginInterface {
     alias?: string;
     fallback?: string;
   }>;
+  /** Returns current grant state without prompting. */
+  checkMeshPermissions(): Promise<MeshPermissionState>;
+  /** Triggers the OS runtime permission dialog(s). Show a rationale screen before calling this. */
+  requestMeshPermissions(): Promise<MeshPermissionState>;
+  /** Opens this app's system Settings page (for a denial screen's "Open Settings" action). */
+  openAppSettings(): Promise<void>;
+  addListener(
+    eventName: 'permissionState',
+    listenerFunc: (event: MeshPermissionState) => void
+  ): Promise<PluginListenerHandle>;
   addListener(
     eventName: 'peerFound',
     listenerFunc: (event: {
