@@ -1,82 +1,60 @@
 /**
- * Onboarding & Android Permissions Explainer Screen (src/screens/OnboardingScreen.tsx)
- * Per §2 & §8.2:
- * - Generates/displays Ed25519 + X25519 keys & short Node ID
- * - Sets responder display name & optional 4-digit PIN for encryption at rest
- * - Explains Android Nearby Connections permissions clearly
- * - Selects language, initial power mode, and optional Featherless AI key
+ * First-run onboarding (src/screens/OnboardingScreen.tsx): three short steps.
+ * 1. What the app does. 2. Why each permission is needed + the real OS request (native only).
+ * 3. Name, optional PIN (skippable with a clear warning), language. Denied permissions never block
+ * setup: the app still runs on the simulated mesh and says so.
  */
 
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Capacitor } from '@capacitor/core';
-import {
-  CheckCircle2,
-  ExternalLink,
-  KeyRound,
-  Lock,
-  Radio,
-  ShieldAlert,
-  ShieldCheck,
-  Smartphone,
-} from 'lucide-react';
-import {
-  ANDROID_PERMISSIONS_LIST,
-  AppScreenId,
-  POWER_MODES_CONTENT,
-  sanketContent,
-} from '../content';
+import { Check, ExternalLink, KeyRound, MessageSquareLock, Radio, ShieldAlert, Siren } from 'lucide-react';
+import { AppScreenId } from '../content';
 import { useMeshStore } from '../store/useMeshStore';
-import { PowerMode } from '../mesh/types';
+import { BridgeLogo } from '../ui/Splash';
+import { Button } from '../ui/Button';
+import { Card } from '../ui/Card';
+import { Badge } from '../ui/Badge';
 import { MeshPermissionState } from '../transport/NearbyTransport';
 
 interface OnboardingScreenProps {
   onCompleteNavigate: (screen: AppScreenId) => void;
 }
 
-/**
- * Maps this UI's permission-list ids to the real native permission-state keys returned by
- * NearbyMeshPlugin. Ids with no entry here aren't runtime-requestable: `fg-service`
- * (FOREGROUND_SERVICE) is a normal manifest permission granted at install time, and
- * `camera-qr` has no QR-scan feature wired up yet.
- */
-const PERMISSION_ID_TO_STATE_KEY: Partial<
-  Record<string, keyof MeshPermissionState>
-> = {
-  'bt-scan': 'bluetoothScan',
-  'bt-advertise': 'bluetoothAdvertise',
-  'bt-connect': 'bluetoothConnect',
-  'nearby-wifi': 'nearbyWifi',
-  'fine-location': 'fineLocation',
-};
+const LANGUAGES = ['English', 'Hindi', 'Telugu', 'Tamil'] as const;
 
-export function OnboardingScreen({
-  onCompleteNavigate,
-}: OnboardingScreenProps) {
+const PERMISSION_ROWS: { key: keyof MeshPermissionState; title: string; why: string }[] = [
+  { key: 'bluetoothScan', title: 'Find nearby phones', why: 'Bluetooth scan: discover other Sanket Setu phones with no internet.' },
+  { key: 'bluetoothAdvertise', title: 'Be found by nearby phones', why: 'Bluetooth advertise: lets others see and relay through your phone.' },
+  { key: 'bluetoothConnect', title: 'Connect to them', why: 'Bluetooth connect: opens the encrypted link used to exchange messages.' },
+  { key: 'nearbyWifi', title: 'Faster transfers', why: 'Nearby Wi-Fi devices: switches to Wi-Fi Direct when it is available.' },
+  { key: 'notifications', title: 'Keep relaying', why: 'Notifications: shows the "mesh active" notice that keeps the radio running with the screen off.' },
+  { key: 'fineLocation', title: 'SOS location (optional)', why: 'Location is used only if you choose to attach it to an SOS. Exact position is sealed to verified responders.' },
+];
+
+export function OnboardingScreen({ onCompleteNavigate }: OnboardingScreenProps) {
   const identity = useMeshStore((s) => s.identity);
-  const currentLang = useMeshStore((s) => s.language);
-  const metrics = useMeshStore((s) => s.metrics);
-  const featherlessApiKey = useMeshStore((s) => s.featherlessApiKey);
   const completeOnboarding = useMeshStore((s) => s.completeOnboarding);
   const permissionState = useMeshStore((s) => s.permissionState);
   const checkMeshPermissions = useMeshStore((s) => s.checkMeshPermissions);
   const requestMeshPermissions = useMeshStore((s) => s.requestMeshPermissions);
   const openAppSettings = useMeshStore((s) => s.openAppSettings);
-
-  const [displayName, setDisplayName] = useState(identity.displayName);
-  const [pin, setPin] = useState('');
-  const [language, setLanguage] = useState(currentLang);
-  const [powerMode, setPowerMode] = useState<PowerMode>(metrics.powerMode);
-  const [aiKey, setAiKey] = useState(featherlessApiKey);
-  const [requesting, setRequesting] = useState(false);
   const isNative = Capacitor.isNativePlatform();
 
+  const [step, setStep] = useState(1);
+  const [requesting, setRequesting] = useState(false);
+  const [name, setName] = useState(identity.displayName.startsWith('SANKET-A') ? '' : identity.displayName);
+  const [pin, setPin] = useState('');
+  const [pinConfirm, setPinConfirm] = useState('');
+  const [skipPin, setSkipPin] = useState(false);
+  const [language, setLanguage] = useState<string>('English');
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
   useEffect(() => {
-    if (isNative) {
-      void checkMeshPermissions();
-    }
+    if (isNative) void checkMeshPermissions();
   }, [isNative, checkMeshPermissions]);
 
-  const handleGrantAccess = async () => {
+  const grant = async () => {
     setRequesting(true);
     try {
       await requestMeshPermissions();
@@ -85,297 +63,164 @@ export function OnboardingScreen({
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    await completeOnboarding({
-      displayName,
-      pin: pin.trim() || undefined,
-      language,
-      powerMode,
-      featherlessApiKey: aiKey,
-    });
-    onCompleteNavigate('home');
+  const finish = async () => {
+    setError(null);
+    if (!name.trim()) return setError('Enter a name so others can recognise you.');
+    if (!skipPin) {
+      if (pin.trim().length < 4) return setError('Use a PIN of at least 4 characters, or choose "Skip PIN".');
+      if (pin !== pinConfirm) return setError('The two PINs do not match.');
+    }
+    setSaving(true);
+    try {
+      await completeOnboarding({
+        displayName: name,
+        pin: skipPin ? undefined : pin,
+        language,
+        powerMode: 'balanced',
+      });
+      onCompleteNavigate('home');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not finish setup.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
-    <section className="mx-auto w-full max-w-4xl px-4 pt-3 pb-28 sm:px-6">
-      <div className="mb-6">
-        <span className="type-mono-label text-[var(--muted)]">
-          {sanketContent.onboarding.kicker}
-        </span>
-        <h1 className="type-h1 mt-1 font-grotesk text-[var(--fg)]">
-          {sanketContent.onboarding.title}
-        </h1>
-        <p className="type-body mt-2 max-w-2xl text-[var(--muted)]">
-          {sanketContent.onboarding.subtitle}
-        </p>
-      </div>
+    <section className="mx-auto flex min-h-[calc(100vh-var(--header-h))] w-full max-w-lg flex-col gap-5 px-4 pt-6 pb-8">
+      <p className="text-sm font-semibold text-[var(--fg-secondary)]" aria-live="polite">Step {step} of 3</p>
 
-      <form onSubmit={handleSubmit} className="space-y-6">
-        {/* 1. Cryptographic Identity & Callsign */}
-        <div className="nova-card p-5">
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
-              <KeyRound className="h-5 w-5 text-[var(--verified-ink)]" />
-              <h2 className="font-grotesk text-lg font-bold text-[var(--fg)]">
-              Create your device identity
-              </h2>
-            </div>
-            <span className="rounded-full bg-[var(--accent-green)] px-3 py-1 font-mono text-xs font-bold text-[var(--on-fill)]">
-              NODE ID #{identity.nodeId}
-            </span>
-          </div>
+      {step === 1 && (
+        <>
+          <BridgeLogo className="mx-auto w-48" />
+          <h1 className="text-[1.75rem] leading-tight font-bold text-[var(--fg)]">Messages and SOS when networks fail</h1>
+          <ul className="flex flex-col gap-3">
+            {[
+              { icon: Radio, text: 'Phones talk directly to each other over Bluetooth and Wi-Fi Direct. No internet or cell signal needed.' },
+              { icon: MessageSquareLock, text: 'If someone is out of range, nearby phones pass your message along. It is encrypted so relays cannot read it.' },
+              { icon: Siren, text: 'SOS goes to everyone nearby and repeats until a verified responder acknowledges it.' },
+            ].map(({ icon: Icon, text }) => (
+              <li key={text} className="flex items-start gap-3 text-base text-[var(--fg)]">
+                <Icon aria-hidden="true" className="mt-0.5 h-6 w-6 shrink-0 text-[var(--verified-ink)]" />
+                {text}
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
 
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <div>
-              <label
-                htmlFor="onboard-name"
-                className="type-mono-label block text-[var(--muted)]"
-              >
-                {sanketContent.onboarding.nameLabel}
-              </label>
-              <input
-                id="onboard-name"
-                type="text"
-                value={displayName}
-                onChange={(e) => setDisplayName(e.target.value)}
-                placeholder={sanketContent.onboarding.namePlaceholder}
-                className="mt-1.5 min-h-[48px] w-full rounded-xl border border-[var(--line)] bg-[var(--surface-2)] px-4 font-grotesk text-base text-[var(--fg)] focus:border-[var(--fg)] focus:outline-none"
-                required
-              />
-            </div>
-
-            <div>
-              <label
-                htmlFor="onboard-pin"
-                className="type-mono-label block text-[var(--muted)]"
-              >
-                {sanketContent.onboarding.pinLabel}
-              </label>
-              <div className="relative mt-1.5">
-                <input
-                  id="onboard-pin"
-                  type="password"
-                  inputMode="numeric"
-                  maxLength={8}
-                  value={pin}
-                  onChange={(e) => setPin(e.target.value)}
-                  placeholder={sanketContent.onboarding.pinPlaceholder}
-                  className="min-h-[48px] w-full rounded-xl border border-[var(--line)] bg-[var(--surface-2)] px-4 font-mono text-base text-[var(--fg)] focus:border-[var(--fg)] focus:outline-none"
-                />
-                <Lock className="pointer-events-none absolute top-3.5 right-3.5 h-4 w-4 text-[var(--muted)]" />
-              </div>
-            </div>
-          </div>
-
-          <div className="mt-4 grid grid-cols-1 gap-2 rounded-xl border border-[var(--line)] bg-[var(--surface-2)] p-3 font-mono text-[11px] sm:grid-cols-2">
-            <div>
-              <span className="text-[var(--muted)]">Ed25519 Sign PubKey:</span>
-              <div className="truncate text-[var(--fg)]">
-                {identity.signPublicKeyB64}
-              </div>
-            </div>
-            <div>
-              <span className="text-[var(--muted)]">X25519 ECDH PubKey:</span>
-              <div className="truncate text-[var(--fg)]">
-                {identity.boxPublicKeyB64}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* 2. Android Nearby Mesh Permissions — real OS grant state on native, explainer-only in browser */}
-        <div className="nova-card p-5">
-          <div className="mb-3 flex items-center gap-2">
-            <Smartphone className="h-5 w-5 text-[var(--relay-ink)]" />
-            <h2 className="font-grotesk text-lg font-bold text-[var(--fg)]">
-              Nearby device permissions
-            </h2>
-          </div>
-          <p className="mb-4 text-sm text-[var(--muted)]">
-            Sanket uses Google Nearby Connections (Bluetooth + BLE + Wi-Fi Direct) to form an offline mesh. Location is strictly optional and never sent silently.
+      {step === 2 && (
+        <>
+          <h1 className="text-[1.75rem] leading-tight font-bold text-[var(--fg)]">Permissions</h1>
+          <p className="text-base text-[var(--fg-secondary)]">
+            Android asks for these so phones can find each other. Nothing is sent to a server.
           </p>
-
           {!isNative && (
-            <p className="mb-4 rounded-xl border border-[var(--line)] bg-[var(--surface-2)] p-3 text-xs text-[var(--muted)]">
-              Running in the browser preview — Android doesn't prompt for these here. Status below reflects what will be requested when this is installed as an Android app.
-            </p>
+            <Card className="p-3 text-sm text-[var(--fg-secondary)]">
+              Browser preview: Android permissions are not requested here. The simulated mesh still works.
+            </Card>
           )}
-
-          <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
-            {ANDROID_PERMISSIONS_LIST.map((perm) => {
-              const stateKey = PERMISSION_ID_TO_STATE_KEY[perm.id];
-              // fg-service is a manifest (install-time) permission, not runtime-requestable —
-              // always effectively granted. Unmapped ids (camera-qr) have no feature wired up yet.
-              const granted = !isNative
-                ? false
-                : stateKey
-                  ? Boolean(permissionState?.[stateKey])
-                  : perm.id === 'fg-service';
-              const applicable =
-                stateKey === undefined || permissionState?.[stateKey] !== undefined || perm.id === 'fg-service';
+          <ul className="flex flex-col gap-2">
+            {PERMISSION_ROWS.map((row) => {
+              const applicable = permissionState ? permissionState[row.key] !== undefined : true;
+              const granted = Boolean(permissionState?.[row.key]);
               return (
-                <div
-                  key={perm.id}
-                  className={`flex min-h-[68px] items-start justify-between gap-3 rounded-2xl border p-3.5 text-left ${
-                    granted
-                      ? 'border-[var(--fg)]/35 bg-[var(--surface-2)]'
-                      : 'border-[var(--line)] bg-[var(--surface)] opacity-75'
-                  }`}
-                >
-                  <div>
-                    <div className="flex items-center gap-1.5">
-                      <span className="font-grotesk text-sm font-bold text-[var(--fg)]">
-                        {perm.title}
-                      </span>
-                      <span
-                        className={`rounded px-1.5 py-0.5 font-mono text-[9px] font-bold uppercase ${
-                          perm.requiredForCore
-                            ? 'bg-[var(--accent-lilac)] text-[var(--on-fill)]'
-                            : 'bg-[var(--surface)] text-[var(--muted)]'
-                        }`}
-                      >
-                        {perm.requiredForCore ? 'core mesh' : 'opt-in only'}
-                      </span>
-                    </div>
-                    <p className="mt-1 text-xs leading-snug text-[var(--muted)]">
-                      {perm.purpose}
-                    </p>
-                    {isNative && !applicable && (
-                      <p className="mt-1 text-[10px] uppercase text-[var(--muted)]">
-                        not applicable on this Android version
-                      </p>
+                <li key={row.key}>
+                  <Card className="flex items-start justify-between gap-3 p-3">
+                    <span className="flex flex-col">
+                      <span className="text-base font-semibold text-[var(--fg)]">{row.title}</span>
+                      <span className="text-sm text-[var(--fg-secondary)]">{row.why}</span>
+                    </span>
+                    {isNative && (
+                      <Badge tone={!applicable ? 'neutral' : granted ? 'safe' : 'warn'} icon={granted ? <Check aria-hidden="true" className="h-3 w-3" /> : undefined}>
+                        {!applicable ? 'Not needed' : granted ? 'Allowed' : 'Not allowed'}
+                      </Badge>
                     )}
-                  </div>
-                  <CheckCircle2
-                    className={`h-5 w-5 shrink-0 ${
-                      granted ? 'text-[var(--verified-ink)]' : 'text-[var(--muted)]/40'
-                    }`}
-                  />
-                </div>
+                  </Card>
+                </li>
               );
             })}
-          </div>
-
-          {isNative && (
-            <div className="mt-4 flex flex-col gap-2.5">
-              {permissionState && !permissionState.allGranted && (
-                <div className="flex items-start gap-2 rounded-xl border border-[var(--accent-coral)]/40 bg-[var(--accent-coral)]/10 p-3 text-xs text-[var(--fg)]">
-                  <ShieldAlert className="h-4 w-4 shrink-0 text-[var(--sos-ink)]" />
-                  <span>
-                    Some permissions are denied. The app still works — you'll see the simulated demo mesh — but it can't reach real nearby phones until core mesh permissions above are granted.
-                  </span>
-                </div>
-              )}
-              <div className="flex flex-wrap gap-2.5">
-                <button
-                  type="button"
-                  onClick={() => void handleGrantAccess()}
-                  disabled={requesting}
-                  className="flex min-h-[48px] items-center gap-2 rounded-full bg-[var(--accent-lilac)] px-5 text-sm font-bold text-[var(--on-fill)] disabled:opacity-60"
-                >
-                  <ShieldCheck className="h-4 w-4" />
-                  {requesting ? 'requesting…' : 'grant access'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void openAppSettings()}
-                  className="flex min-h-[48px] items-center gap-2 rounded-full border border-[var(--line)] px-5 text-sm font-bold text-[var(--fg)]"
-                >
-                  <ExternalLink className="h-4 w-4" />
-                  open settings
-                </button>
-              </div>
+          </ul>
+          {isNative && permissionState && !permissionState.allGranted && (
+            <div role="alert" className="flex items-start gap-2 rounded-[var(--radius)] border border-[var(--line)] bg-[var(--warn-tint)] p-3 text-sm text-[var(--warn-ink)]">
+              <ShieldAlert aria-hidden="true" className="mt-0.5 h-5 w-5 shrink-0" />
+              Without these permissions phones cannot find each other. You can continue and see the simulated mesh, and allow them later in Settings.
             </div>
           )}
-        </div>
-
-        {/* 3. Power Mode & Language Selection */}
-        <div className="nova-card p-5">
-          <div className="mb-3 flex items-center gap-2">
-            <Radio className="h-5 w-5 text-[var(--safe-ink)]" />
-            <h2 className="font-grotesk text-lg font-bold text-[var(--fg)]">
-              Power mode and language
-            </h2>
-          </div>
-
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            {POWER_MODES_CONTENT.map((pm) => {
-              const active = powerMode === pm.id;
-              return (
-                <button
-                  key={pm.id}
-                  type="button"
-                  onClick={() => setPowerMode(pm.id)}
-                  className={`flex min-h-[96px] cursor-pointer flex-col justify-between rounded-2xl border p-3.5 text-left transition-all ${
-                    active
-                      ? 'border-[var(--fg)] bg-[var(--fg)] text-[var(--bg)]'
-                      : 'border-[var(--line)] bg-[var(--surface-2)] text-[var(--fg)]'
-                  }`}
-                >
-                  <div className="font-grotesk text-base font-bold">
-                    {pm.label}
-                  </div>
-                  <div className="mt-1 font-mono text-[11px] opacity-85">
-                    {pm.scanWindowLabel}
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-
-          <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <div>
-              <label
-                htmlFor="onboard-lang"
-                className="type-mono-label block text-[var(--muted)]"
-              >
-                {sanketContent.onboarding.languageLabel}
-              </label>
-              <select
-                id="onboard-lang"
-                value={language}
-                onChange={(e) => setLanguage(e.target.value)}
-                className="mt-1.5 min-h-[48px] w-full rounded-xl border border-[var(--line)] bg-[var(--surface-2)] px-3.5 font-grotesk text-sm text-[var(--fg)]"
-              >
-                <option value="English">English</option>
-                <option value="Hindi">Hindi (हिन्दी)</option>
-                <option value="Tamil">Tamil (தமிழ்)</option>
-                <option value="Telugu">Telugu (తెలుగు)</option>
-                <option value="Spanish">Spanish (Español)</option>
-                <option value="French">French (Français)</option>
-              </select>
+          {isNative && (
+            <div className="flex flex-wrap gap-3">
+              <Button tone="primary" onClick={() => void grant()} disabled={requesting || permissionState?.allGranted}>
+                {requesting ? 'Requesting…' : permissionState?.allGranted ? 'All allowed' : 'Allow permissions'}
+              </Button>
+              <Button onClick={() => void openAppSettings()}>
+                <ExternalLink aria-hidden="true" className="h-4 w-4" />
+                Open settings
+              </Button>
             </div>
+          )}
+        </>
+      )}
 
-            <div>
-              <label
-                htmlFor="onboard-ai-key"
-                className="type-mono-label block text-[var(--muted)]"
-              >
-                optional featherless.ai api key (online triage only)
-              </label>
-              <input
-                id="onboard-ai-key"
-                type="password"
-                value={aiKey}
-                onChange={(e) => setAiKey(e.target.value)}
-                placeholder="Leave blank to use the offline rule-based classifier"
-                className="mt-1.5 min-h-[48px] w-full rounded-xl border border-[var(--line)] bg-[var(--surface-2)] px-3.5 font-mono text-xs text-[var(--fg)]"
-              />
+      {step === 3 && (
+        <>
+          <h1 className="text-[1.75rem] leading-tight font-bold text-[var(--fg)]">Your name and key</h1>
+          <p className="text-base text-[var(--fg-secondary)]">
+            Your phone creates its own signing and encryption keys. They never leave the device.
+          </p>
+          <label className="flex flex-col gap-1 text-base font-semibold text-[var(--fg)]">
+            Name shown to others
+            <input value={name} onChange={(e) => setName(e.target.value)} maxLength={32} autoComplete="off"
+              className="min-h-12 rounded-[var(--radius-sm)] border border-[var(--line)] bg-[var(--surface)] px-3 text-base font-normal text-[var(--fg)]" />
+          </label>
+          <label className="flex flex-col gap-1 text-base font-semibold text-[var(--fg)]">
+            Language for SOS pictograms
+            <select value={language} onChange={(e) => setLanguage(e.target.value)}
+              className="min-h-12 rounded-[var(--radius-sm)] border border-[var(--line)] bg-[var(--surface)] px-3 text-base font-normal text-[var(--fg)]">
+              {LANGUAGES.map((l) => <option key={l}>{l}</option>)}
+            </select>
+          </label>
+
+          <Card className="flex flex-col gap-3 p-4">
+            <div className="flex items-center gap-2">
+              <KeyRound aria-hidden="true" className="h-5 w-5 text-[var(--verified-ink)]" />
+              <h2 className="text-lg font-bold text-[var(--fg)]">Protect keys with a PIN</h2>
             </div>
-          </div>
-        </div>
+            {!skipPin ? (
+              <>
+                <input type="password" inputMode="numeric" autoComplete="new-password" value={pin} onChange={(e) => setPin(e.target.value)}
+                  placeholder="PIN (4+ characters)" aria-label="PIN"
+                  className="min-h-12 rounded-[var(--radius-sm)] border border-[var(--line)] bg-[var(--bg)] px-3 text-base text-[var(--fg)]" />
+                <input type="password" inputMode="numeric" autoComplete="new-password" value={pinConfirm} onChange={(e) => setPinConfirm(e.target.value)}
+                  placeholder="Repeat PIN" aria-label="Repeat PIN"
+                  className="min-h-12 rounded-[var(--radius-sm)] border border-[var(--line)] bg-[var(--bg)] px-3 text-base text-[var(--fg)]" />
+                <p className="text-sm text-[var(--fg-secondary)]">
+                  You will enter this PIN each time you open the app. If you forget it, the keys cannot be recovered.
+                </p>
+                <Button onClick={() => setSkipPin(true)}>Skip PIN</Button>
+              </>
+            ) : (
+              <>
+                <div role="alert" className="rounded-[var(--radius-sm)] bg-[var(--warn-tint)] p-3 text-sm font-medium text-[var(--warn-ink)]">
+                  Without a PIN, anyone who can read this phone&apos;s app storage could use your keys to send messages as you.
+                </div>
+                <Button onClick={() => setSkipPin(false)}>Set a PIN instead</Button>
+              </>
+            )}
+          </Card>
+          {error && <p role="alert" className="text-base font-semibold text-[var(--sos-ink)]">{error}</p>}
+        </>
+      )}
 
-        <div className="flex justify-end">
-          <button
-            type="submit"
-            className="flex min-h-[52px] cursor-pointer items-center gap-2 rounded-full bg-[var(--accent-green)] px-8 py-3 font-grotesk text-base font-bold text-[var(--on-fill)] shadow-md transition-transform hover:scale-[1.01]"
-          >
-            <ShieldCheck className="h-5 w-5" />
-            <span>{sanketContent.onboarding.completeCta}</span>
-          </button>
-        </div>
-      </form>
+      <div className="mt-auto flex gap-3 pt-2">
+        {step > 1 && <Button onClick={() => setStep(step - 1)} className="flex-1">Back</Button>}
+        {step < 3 ? (
+          <Button tone="primary" onClick={() => setStep(step + 1)} className="flex-1">Next</Button>
+        ) : (
+          <Button tone="primary" onClick={() => void finish()} disabled={saving} className="flex-1">
+            {saving ? 'Creating keys…' : 'Finish setup'}
+          </Button>
+        )}
+      </div>
     </section>
   );
 }

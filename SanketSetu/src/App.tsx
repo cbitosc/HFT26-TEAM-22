@@ -7,6 +7,8 @@ import { Suspense, lazy, useEffect, useState } from 'react';
 import { AppScreenId, MOBILE_TABS } from './content';
 import { useReducedMotion } from './hooks/useReducedMotion';
 import { Skeleton } from './ui/Skeleton';
+import { Splash } from './ui/Splash';
+import { PinUnlockScreen } from './screens/PinUnlockScreen';
 import { TopBar } from './app/TopBar';
 import { BottomPillNav } from './app/BottomPillNav';
 import { useMeshStore } from './store/useMeshStore';
@@ -85,6 +87,10 @@ export default function App() {
     return 'home';
   });
 
+  const [splashDone, setSplashDone] = useState(false);
+  const locked = useMeshStore((s) => s.locked);
+  const initReady = useMeshStore((s) => s.initReady);
+  const onboardingDone = useMeshStore((s) => s.onboardingDone);
   const theme = useMeshStore((s) => s.theme);
   const setTheme = useMeshStore((s) => s.setTheme);
   const isSaverMode = useMeshStore((s) => s.metrics.powerMode === 'saver');
@@ -122,6 +128,23 @@ export default function App() {
       window.scrollTo({ top: 0 });
     }
   };
+
+  if (!splashDone) {
+    return <Splash onDone={() => setSplashDone(true)} />;
+  }
+  if (locked) {
+    return <PinUnlockScreen />;
+  }
+  // First run: onboarding is the whole screen (no nav) until setup is finished.
+  if (initReady && !onboardingDone) {
+    return (
+      <div className="min-h-screen w-full bg-[var(--bg)] text-[var(--fg)]">
+        <Suspense fallback={<ScreenLoadingFallback />}>
+          <OnboardingScreen onCompleteNavigate={handleNavigate} />
+        </Suspense>
+      </div>
+    );
+  }
 
   return (
     <div className="relative min-h-screen w-full overflow-x-hidden bg-[var(--bg)] text-[var(--fg)]">

@@ -24,7 +24,10 @@ import {
   StoredSOSAlert,
 } from '../mesh/types';
 import {
+  base64ToBytes,
+  bytesToBase64,
   decryptSecretKeysWithVaultKey,
+  derivePinKey,
   encryptIdentityWithPin,
   encryptSecretKeysWithVaultKey,
   generateNodeIdentity,
@@ -106,6 +109,13 @@ export interface MeshStoreState {
 
   /** Count of peers currently connected over the real Nearby Connections radio (0 off native, or with no real peers in range). */
   realRadioPeerCount: number;
+
+  // Startup progress, reported from real init steps (drives the splash status line)
+  initStep: string;
+  initReady: boolean;
+  /** True when a PIN vault exists and has not been unlocked this session. */
+  locked: boolean;
+  pinEnabled: boolean;
 
   // UI preferences (persisted in the kv table)
   theme: ThemeMode;
@@ -248,6 +258,8 @@ export interface MeshStoreState {
   openAppSettings: () => Promise<void>;
   dismissPermissionGate: () => void;
 
+  unlockWithPin: (pin: string) => Promise<boolean>;
+  enablePin: (pin: string) => Promise<void>;
   setTheme: (mode: ThemeMode) => void;
   setVisuals3D: (enabled: boolean) => void;
   dismissDarkSuggestion: () => void;
@@ -348,8 +360,22 @@ function queueSeenPersist(row: PersistedSeenRow): void {
  * nacl.secretbox-encrypted under the device-local vault key). Never writes raw secret
  * keys to storage. See `crypto/identity.ts` for the threat model.
  */
+// When the user sets a PIN, the vault key is derived from it and exists only in memory for the
+// session (the random local key is deleted), so the secret keys at rest can't be opened without
+// the PIN. Without a PIN we fall back to the device-local random key (see SECURITY.md).
+let sessionVaultKeyB64: string | null = null;
+let initListenersAttached = false;
+
+async function currentVaultKey(): Promise<string> {
+  return sessionVaultKeyB64 ?? (await getOrCreateLocalVaultKey());
+}
+
+function vaultKeyFromPin(pin: string, saltB64: string): string {
+  return bytesToBase64(derivePinKey(pin, base64ToBytes(saltB64)));
+}
+
 async function persistIdentity(identity: NodeIdentity): Promise<void> {
-  const vaultKeyB64 = await getOrCreateLocalVaultKey();
+  const vaultKeyB64 = await currentVaultKey();
   const { publicPart, secretPart } = splitIdentityForStorage(identity);
   const encryptedSecrets = encryptSecretKeysWithVaultKey(secretPart, vaultKeyB64);
   await saveKvJson('node_identity_public', publicPart);
@@ -368,7 +394,7 @@ async function loadPersistedIdentity(): Promise<NodeIdentity | null> {
   >>('node_identity_secret_enc');
 
   if (publicPart && encryptedSecrets) {
-    const vaultKeyB64 = await getOrCreateLocalVaultKey();
+    const vaultKeyB64 = await currentVaultKey();
     const secretPart = decryptSecretKeysWithVaultKey(encryptedSecrets, vaultKeyB64);
     if (secretPart) {
       return mergeIdentityFromStorage(publicPart, secretPart);
@@ -780,6 +806,10 @@ export const useMeshStore = create<MeshStoreState>((set, get) => ({
   permissionGateDismissed: false,
   realRadioPeerCount: 0,
 
+  initStep: 'Starting',
+  initReady: false,
+  locked: false,
+  pinEnabled: false,
   theme: readInitialTheme(),
   visuals3D: false,
   darkSuggestionDismissed: false,
@@ -891,6 +921,8 @@ export const useMeshStore = create<MeshStoreState>((set, get) => ({
   initMeshApp: async () => {
     if (get().initialized) return;
 
+    if (!initListenersAttached) {
+    initListenersAttached = true;
     // Listen to browser online/offline transitions
     if (typeof window !== 'undefined') {
       const updateOnline = () => set({ isOnline: navigator.onLine });
@@ -916,7 +948,18 @@ export const useMeshStore = create<MeshStoreState>((set, get) => ({
     simController.onTopologyChange(() => {
       scheduleThrottledSync(set, get);
     });
+    }
 
+    set({ initStep: 'Unlocking keys' });
+    const pinSalt = await loadKvJson<string>('pin_vault_salt');
+    if (pinSalt && sessionVaultKeyB64 === null) {
+      // A PIN vault exists: stop here until the user unlocks it (App shows the PIN screen).
+      set({ locked: true, pinEnabled: true, initReady: true, initStep: 'Locked' });
+      return;
+    }
+    set({ pinEnabled: Boolean(pinSalt), locked: false });
+
+    set({ initStep: 'Opening local store' });
     const savedIdentity = await loadPersistedIdentity();
     const savedOnboarding = await loadKvJson<boolean>('onboarding_done');
     const savedAiKey = await loadKvJson<string>('featherless_api_key');
@@ -948,7 +991,39 @@ export const useMeshStore = create<MeshStoreState>((set, get) => ({
       myResponderCert: savedCert ?? null,
     });
 
-    await setupDefaultFourNodeChain(activeIdentity, set, get);
+    set({ initStep: 'Starting radio' });
+    try {
+      await setupDefaultFourNodeChain(activeIdentity, set, get);
+    } finally {
+      set({ initReady: true, initStep: 'Ready' });
+    }
+  },
+
+  unlockWithPin: async (pin: string) => {
+    const salt = await loadKvJson<string>('pin_vault_salt');
+    const enc = await loadKvJson<ReturnType<typeof encryptSecretKeysWithVaultKey>>('node_identity_secret_enc');
+    if (!salt || !enc) return false;
+    const key = vaultKeyFromPin(pin.trim(), salt);
+    if (!decryptSecretKeysWithVaultKey(enc, key)) return false;
+    sessionVaultKeyB64 = key;
+    set({ locked: false, initReady: false });
+    await get().initMeshApp();
+    return true;
+  },
+
+  enablePin: async (pin: string) => {
+    const clean = pin.trim();
+    if (clean.length < 4) throw new Error('PIN must be at least 4 characters');
+    const salt = bytesToBase64(crypto.getRandomValues(new Uint8Array(16)));
+    sessionVaultKeyB64 = vaultKeyFromPin(clean, salt);
+    await persistIdentity(get().identity); // re-encrypt the secrets under the PIN-derived key
+    await saveKvJson('pin_vault_salt', salt);
+    try {
+      await sanketDb.kv.delete('local_vault_key_b64'); // the random key must not sit beside the ciphertext
+    } catch {
+      // ignore
+    }
+    set({ pinEnabled: true, keyEncryptedWithPin: true });
   },
 
   completeOnboarding: async ({
@@ -967,14 +1042,9 @@ export const useMeshStore = create<MeshStoreState>((set, get) => ({
     await persistIdentity(updatedIdentity);
     await saveKvJson('onboarding_done', true);
 
-    // The running app always unlocks via the device-local vault key (see persistIdentity
-    // above) — there is no PIN-unlock screen yet. When a PIN is set, we additionally keep a
-    // portable PIN-encrypted copy for future cross-device recovery (not yet wired to a
-    // restore flow); this does not change what protects the identity on THIS device.
-    let pinEncrypted = false;
+    let pinEncrypted = get().pinEnabled;
     if (pin && pin.trim().length >= 4) {
-      const blob = encryptIdentityWithPin(updatedIdentity, pin.trim());
-      await saveKvJson('encrypted_keystore_blob', blob);
+      await get().enablePin(pin);
       pinEncrypted = true;
     }
 
