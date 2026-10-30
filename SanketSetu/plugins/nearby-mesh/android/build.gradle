@@ -1,0 +1,31 @@
+apply plugin: 'com.android.library'
+apply plugin: 'kotlin-android'
+
+android {
+    // Distinct from the app's own "org.sanket.mesh" namespace (AGP requires unique R/BuildConfig
+    // namespaces per module); the hand-written Kotlin sources below still declare
+    // `package org.sanket.mesh` and are unaffected by this build-only namespace.
+    namespace = "org.sanket.mesh.nearby"
+    compileSdk = rootProject.ext.compileSdkVersion
+
+    defaultConfig {
+        minSdkVersion rootProject.ext.minSdkVersion
+        targetSdkVersion rootProject.ext.targetSdkVersion
+        consumerProguardFiles "consumer-rules.pro"
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    kotlinOptions {
+        jvmTarget = "17"
+    }
+}
+
+dependencies {
+    implementation project(':capacitor-android')
+    implementation "androidx.core:core-ktx:1.13.1"
+    implementation "com.google.android.gms:play-services-nearby:19.3.0"
+}
