@@ -434,7 +434,7 @@ async function setupDefaultFourNodeChain(
   // just throw internally and do nothing, so there's no point including it there.
   let engineTransport: Transport = userSimTransport;
   if (Capacitor.isNativePlatform()) {
-    nativeNearbyTransport = new NearbyTransport(userIdentity.displayName);
+    nativeNearbyTransport = new NearbyTransport(userIdentity.nodeId, userIdentity.displayName);
     engineTransport = new CompositeTransport([nativeNearbyTransport, userSimTransport]);
   } else {
     nativeNearbyTransport = null;

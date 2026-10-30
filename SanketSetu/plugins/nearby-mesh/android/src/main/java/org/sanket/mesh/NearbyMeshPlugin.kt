@@ -52,17 +52,41 @@ class NearbyMeshPlugin : Plugin() {
     companion object {
         const val MAX_CONCURRENT_CONNECTIONS = 4
         const val KEYSTORE_ALIAS = "org.sanket.mesh.identity.masterkey"
+
+        /** Bumped whenever the wire packet format or endpoint-name encoding changes. */
+        const val PROTOCOL_VERSION = "v1"
     }
 
     private lateinit var connectionsClient: ConnectionsClient
+    private lateinit var relayCore: RelayCore
     private val connectedPeers = ConcurrentHashMap<String, String>()
     private val peerLastActivityMs = ConcurrentHashMap<String, Long>()
+    private var localNodeId: String = ""
     private var localDisplayName: String = "SANKET-NODE"
     private var serviceId: String = "org.sanket.mesh.p2p.cluster"
 
     override fun load() {
         super.load()
         connectionsClient = Nearby.getConnectionsClient(context)
+        relayCore = RelayCore(connectionsClient)
+    }
+
+    /**
+     * Endpoint names carry the protocol version and our short node ID so peers can (a) reject
+     * incompatible versions before connecting and (b) deterministically decide who initiates —
+     * without this, both sides discovering each other at once could each call
+     * requestConnection(), which Nearby Connections does not fully guarantee is race-free.
+     */
+    private fun encodeEndpointName(nodeId: String, displayName: String): String {
+        return "$PROTOCOL_VERSION|$nodeId|$displayName"
+    }
+
+    private data class ParsedEndpointName(val version: String, val nodeId: String, val displayName: String)
+
+    private fun parseEndpointName(raw: String): ParsedEndpointName? {
+        val parts = raw.split("|", limit = 3)
+        if (parts.size != 3) return null
+        return ParsedEndpointName(version = parts[0], nodeId = parts[1], displayName = parts[2])
     }
 
     private fun rotateOldestIdlePeerIfNeeded(incomingEndpointId: String) {
@@ -96,6 +120,12 @@ class NearbyMeshPlugin : Plugin() {
             if (payload.type == Payload.Type.BYTES) {
                 val bytes = payload.asBytes() ?: return
                 peerLastActivityMs[endpointId] = System.currentTimeMillis()
+
+                // Header-only native relay: keeps packets moving to our other peers even if the
+                // WebView/JS engine is throttled. Independent of (and in addition to) the full
+                // JS-side processing below — see RelayCore's doc comment for the full rationale.
+                relayCore.offer(endpointId, bytes, connectedPeers.keys)
+
                 val b64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
                 val event = JSObject().apply {
                     put("peerId", endpointId)
@@ -120,9 +150,17 @@ class NearbyMeshPlugin : Plugin() {
 
     private val connectionLifecycleCallback = object : ConnectionLifecycleCallback() {
         override fun onConnectionInitiated(endpointId: String, info: ConnectionInfo) {
+            val parsed = parseEndpointName(info.endpointName)
+            if (parsed != null && parsed.version != PROTOCOL_VERSION) {
+                // Incompatible protocol version — reject rather than connect to a peer we can't
+                // safely exchange wire-format packets with.
+                connectionsClient.rejectConnection(endpointId)
+                return
+            }
+
             // Respect 4-neighbor concurrent P2P_CLUSTER cap by rotating the oldest idle peer if full
             rotateOldestIdlePeerIfNeeded(endpointId)
-            connectedPeers[endpointId] = info.endpointName
+            connectedPeers[endpointId] = parsed?.displayName ?: info.endpointName
             peerLastActivityMs[endpointId] = System.currentTimeMillis()
             connectionsClient.acceptConnection(endpointId, payloadCallback)
         }
@@ -156,14 +194,28 @@ class NearbyMeshPlugin : Plugin() {
 
     private val endpointDiscoveryCallback = object : EndpointDiscoveryCallback() {
         override fun onEndpointFound(endpointId: String, info: DiscoveredEndpointInfo) {
-            if (!connectedPeers.containsKey(endpointId)) {
-                rotateOldestIdlePeerIfNeeded(endpointId)
-                connectionsClient.requestConnection(
-                    localDisplayName,
-                    endpointId,
-                    connectionLifecycleCallback
-                )
+            if (connectedPeers.containsKey(endpointId)) return
+
+            val parsed = parseEndpointName(info.endpointName)
+            if (parsed != null && parsed.version != PROTOCOL_VERSION) {
+                return // Incompatible protocol version — never initiate towards it.
             }
+
+            // Deterministic tie-break: only the lower-nodeId side initiates requestConnection.
+            // Both sides advertise AND discover simultaneously (P2P_CLUSTER), so without this,
+            // both could call requestConnection() on the same endpoint pair at once. If we can't
+            // parse the remote's node ID (older/foreign peer), fall back to always initiating
+            // rather than silently never connecting.
+            val remoteNodeId = parsed?.nodeId
+            val weInitiate = remoteNodeId == null || localNodeId < remoteNodeId
+            if (!weInitiate) return
+
+            rotateOldestIdlePeerIfNeeded(endpointId)
+            connectionsClient.requestConnection(
+                encodeEndpointName(localNodeId, localDisplayName),
+                endpointId,
+                connectionLifecycleCallback
+            )
         }
 
         override fun onEndpointLost(endpointId: String) {
@@ -178,6 +230,7 @@ class NearbyMeshPlugin : Plugin() {
 
     @PluginMethod
     fun startAdvertising(call: PluginCall) {
+        localNodeId = call.getString("nodeId") ?: ""
         localDisplayName = call.getString("displayName") ?: "SANKET-NODE"
         serviceId = call.getString("serviceId") ?: serviceId
 
@@ -188,7 +241,7 @@ class NearbyMeshPlugin : Plugin() {
             .build()
 
         connectionsClient.startAdvertising(
-            localDisplayName,
+            encodeEndpointName(localNodeId, localDisplayName),
             serviceId,
             connectionLifecycleCallback,
             options

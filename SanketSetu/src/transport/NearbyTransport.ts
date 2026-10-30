@@ -27,6 +27,7 @@ export interface FanOutLimitEvent {
 
 export interface NearbyMeshPluginInterface {
   startAdvertising(options: {
+    nodeId: string;
     displayName: string;
     serviceId: string;
     strategy: 'P2P_CLUSTER';
@@ -86,6 +87,7 @@ export const NearbyMeshNative = registerPlugin<NearbyMeshPluginInterface>('Nearb
 
 export class NearbyTransport implements Transport {
   public readonly transportName = 'nearby' as const;
+  private readonly nodeId: string;
   private readonly displayName: string;
   private readonly serviceId: string;
   private readonly maxConcurrent: number;
@@ -97,10 +99,12 @@ export class NearbyTransport implements Transport {
   private handles: PluginListenerHandle[] = [];
 
   constructor(
+    nodeId: string,
     displayName: string,
     serviceId = 'org.sanket.mesh.p2p.cluster',
     maxConcurrent = MESH_CONSTANTS.MAX_CONCURRENT_CONNECTIONS
   ) {
+    this.nodeId = nodeId;
     this.displayName = displayName;
     this.serviceId = serviceId;
     this.maxConcurrent = maxConcurrent;
@@ -229,6 +233,7 @@ export class NearbyTransport implements Transport {
       this.handles.push(hFound, hLost, hPayload, hQuality, hFanOut);
 
       await NearbyMeshNative.startAdvertising({
+        nodeId: this.nodeId,
         displayName: this.displayName,
         serviceId: this.serviceId,
         strategy: 'P2P_CLUSTER',
