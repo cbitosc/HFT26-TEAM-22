@@ -42,6 +42,10 @@ export interface NearbyMeshPluginInterface {
     bytesBase64: string;
   }): Promise<{ sent: boolean }>;
   getPeers(): Promise<{ peers: TransportPeerSummary[] }>;
+  /** Drains the native bounded ring buffer of payloads received since the last drain — a resume-time backstop. */
+  drainPendingPayloads(): Promise<{
+    payloads: Array<{ peerId: string; bytesBase64: string }>;
+  }>;
   ensureHardwareKeyBacked(): Promise<{
     hardwareBacked: boolean;
     alias?: string;
@@ -199,13 +203,7 @@ export class NearbyTransport implements Transport {
 
       const hPayload = await NearbyMeshNative.addListener(
         'payloadReceived',
-        (ev) => {
-          this.peerLastActiveMs.set(ev.peerId, Date.now());
-          const bytes = base64ToBytes(ev.bytesBase64);
-          for (const cb of this.packetListeners) {
-            cb(ev.peerId, bytes);
-          }
-        }
+        (ev) => this.handleIncomingPayload(ev.peerId, ev.bytesBase64)
       );
 
       const hQuality = await NearbyMeshNative.addListener(
@@ -242,12 +240,23 @@ export class NearbyTransport implements Transport {
         serviceId: this.serviceId,
         strategy: 'P2P_CLUSTER',
       });
+
+      // Resume-time backstop: drain anything the native ring buffer collected before this
+      // listener attached (e.g. packets that arrived while the WebView was paused), and again
+      // whenever the page regains visibility (app foregrounded).
+      void this.drainPendingPayloads();
+      if (typeof document !== 'undefined') {
+        document.addEventListener('visibilitychange', this.onVisibilityChange);
+      }
     } catch {
       // Running in web browser without native Android bridge; handled gracefully by SimTransport
     }
   }
 
   public async stop(): Promise<void> {
+    if (typeof document !== 'undefined') {
+      document.removeEventListener('visibilitychange', this.onVisibilityChange);
+    }
     for (const h of this.handles) {
       await h.remove();
     }
@@ -258,6 +267,36 @@ export class NearbyTransport implements Transport {
       await NearbyMeshNative.stop();
     } catch {
       // Ignore if running in browser
+    }
+  }
+
+  private handleIncomingPayload(peerId: string, bytesBase64: string): void {
+    this.peerLastActiveMs.set(peerId, Date.now());
+    const bytes = base64ToBytes(bytesBase64);
+    for (const cb of this.packetListeners) {
+      cb(peerId, bytes);
+    }
+  }
+
+  private readonly onVisibilityChange = (): void => {
+    if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+      void this.drainPendingPayloads();
+    }
+  };
+
+  /**
+   * Drains the native bounded ring buffer of payloads collected since the last drain (see
+   * NearbyMeshPlugin.kt: pendingPayloadRing) and replays them through the normal packet
+   * listeners, in the order received. Safe to call even if nothing is pending.
+   */
+  public async drainPendingPayloads(): Promise<void> {
+    try {
+      const { payloads } = await NearbyMeshNative.drainPendingPayloads();
+      for (const p of payloads) {
+        this.handleIncomingPayload(p.peerId, p.bytesBase64);
+      }
+    } catch {
+      // Running in browser without native bridge, or nothing to drain.
     }
   }
 

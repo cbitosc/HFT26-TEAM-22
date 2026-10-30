@@ -26,15 +26,17 @@ import com.google.android.gms.nearby.connection.PayloadCallback
 import com.google.android.gms.nearby.connection.PayloadTransferUpdate
 import com.google.android.gms.nearby.connection.Strategy
 import java.security.KeyStore
-import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.ConcurrentLinkedQueue
 import javax.crypto.KeyGenerator
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 
 /**
- * Capacitor 6 Native Android Plugin wrapping Google Nearby Connections API (Strategy.P2P_CLUSTER).
+ * Capacitor Native Android Plugin wrapping Google Nearby Connections API (Strategy.P2P_CLUSTER).
  * Uses Bluetooth Classic + BLE + Wi-Fi Direct/Hotspot under the hood with zero internet dependency.
- * Enforces MAX_CONCURRENT_CONNECTIONS = 4 (3–5 concurrent neighbor cap on Android radios) with idle rotation.
+ * Connection admission (concurrent cap, idle rotation, version tagging, tie-break) lives in
+ * [ConnectionManager]; header-only flood relay lives in [RelayCore]. This class is the thin
+ * Capacitor <-> Nearby Connections bridge.
  */
 @CapacitorPlugin(
     name = "NearbyMesh",
@@ -47,20 +49,28 @@ import android.security.keystore.KeyProperties
         Permission(strings = [Manifest.permission.POST_NOTIFICATIONS], alias = "notifications")
     ]
 )
-class NearbyMeshPlugin : Plugin() {
+class NearbyMeshPlugin : Plugin(), ConnectionManager.Listener {
 
     companion object {
-        const val MAX_CONCURRENT_CONNECTIONS = 4
         const val KEYSTORE_ALIAS = "org.sanket.mesh.identity.masterkey"
 
-        /** Bumped whenever the wire packet format or endpoint-name encoding changes. */
-        const val PROTOCOL_VERSION = "v1"
+        /** Bounded backstop so a flood can't grow this queue without limit while the WebView is paused. */
+        const val PENDING_PAYLOAD_RING_CAPACITY = 256
     }
 
     private lateinit var connectionsClient: ConnectionsClient
+    private lateinit var connectionManager: ConnectionManager
     private lateinit var relayCore: RelayCore
-    private val connectedPeers = ConcurrentHashMap<String, String>()
-    private val peerLastActivityMs = ConcurrentHashMap<String, Long>()
+
+    /**
+     * Bounded ring buffer of payloads received while nothing has drained them yet. Capacitor's
+     * own `notifyListeners(..., retainUntilConsumed = true)` already retains undelivered events
+     * for the JS listener, but that retention is unbounded; this ring buffer is an explicit,
+     * bounded backstop a resuming WebView can proactively drain via [drainPendingPayloads]
+     * rather than relying solely on bridge-level retention surviving a WebView reload.
+     */
+    private val pendingPayloadRing = ConcurrentLinkedQueue<Pair<String, ByteArray>>()
+
     private var localNodeId: String = ""
     private var localDisplayName: String = "SANKET-NODE"
     private var serviceId: String = "org.sanket.mesh.p2p.cluster"
@@ -68,50 +78,32 @@ class NearbyMeshPlugin : Plugin() {
     override fun load() {
         super.load()
         connectionsClient = Nearby.getConnectionsClient(context)
+        connectionManager = ConnectionManager(connectionsClient).also { it.listener = this }
         relayCore = RelayCore(connectionsClient)
     }
 
-    /**
-     * Endpoint names carry the protocol version and our short node ID so peers can (a) reject
-     * incompatible versions before connecting and (b) deterministically decide who initiates —
-     * without this, both sides discovering each other at once could each call
-     * requestConnection(), which Nearby Connections does not fully guarantee is race-free.
-     */
-    private fun encodeEndpointName(nodeId: String, displayName: String): String {
-        return "$PROTOCOL_VERSION|$nodeId|$displayName"
+    // --- ConnectionManager.Listener -------------------------------------------------------
+
+    override fun onPeerLost(peerId: String) {
+        notifyListeners("peerLost", JSObject().put("peerId", peerId))
     }
 
-    private data class ParsedEndpointName(val version: String, val nodeId: String, val displayName: String)
-
-    private fun parseEndpointName(raw: String): ParsedEndpointName? {
-        val parts = raw.split("|", limit = 3)
-        if (parts.size != 3) return null
-        return ParsedEndpointName(version = parts[0], nodeId = parts[1], displayName = parts[2])
-    }
-
-    private fun rotateOldestIdlePeerIfNeeded(incomingEndpointId: String) {
-        if (connectedPeers.size < MAX_CONCURRENT_CONNECTIONS || connectedPeers.containsKey(incomingEndpointId)) {
-            return
+    override fun onFanOutLimit(evictedPeerId: String, incomingPeerId: String, maxConcurrent: Int, reason: String) {
+        val event = JSObject().apply {
+            put("evictedPeerId", evictedPeerId)
+            put("incomingPeerId", incomingPeerId)
+            put("maxConcurrent", maxConcurrent)
+            put("reason", reason)
         }
-        val oldestEntry = peerLastActivityMs.entries.minByOrNull { it.value }
-        val oldestPeerId = oldestEntry?.key ?: connectedPeers.keys().nextElement()
-        if (oldestPeerId != null) {
-            connectionsClient.disconnectFromEndpoint(oldestPeerId)
-            connectedPeers.remove(oldestPeerId)
-            peerLastActivityMs.remove(oldestPeerId)
+        notifyListeners("fanOutLimit", event)
+    }
 
-            val lostEvent = JSObject().apply {
-                put("peerId", oldestPeerId)
-            }
-            notifyListeners("peerLost", lostEvent)
+    // --- Nearby Connections callbacks ------------------------------------------------------
 
-            val fanOutEvent = JSObject().apply {
-                put("evictedPeerId", oldestPeerId)
-                put("incomingPeerId", incomingEndpointId)
-                put("maxConcurrent", MAX_CONCURRENT_CONNECTIONS)
-                put("reason", "Rotated oldest idle peer to respect P2P_CLUSTER 4-peer concurrent radio cap")
-            }
-            notifyListeners("fanOutLimit", fanOutEvent)
+    private fun enqueuePendingPayload(peerId: String, bytes: ByteArray) {
+        pendingPayloadRing.add(peerId to bytes)
+        while (pendingPayloadRing.size > PENDING_PAYLOAD_RING_CAPACITY) {
+            pendingPayloadRing.poll()
         }
     }
 
@@ -119,25 +111,29 @@ class NearbyMeshPlugin : Plugin() {
         override fun onPayloadReceived(endpointId: String, payload: Payload) {
             if (payload.type == Payload.Type.BYTES) {
                 val bytes = payload.asBytes() ?: return
-                peerLastActivityMs[endpointId] = System.currentTimeMillis()
+                connectionManager.markActive(endpointId)
 
                 // Header-only native relay: keeps packets moving to our other peers even if the
                 // WebView/JS engine is throttled. Independent of (and in addition to) the full
                 // JS-side processing below — see RelayCore's doc comment for the full rationale.
-                relayCore.offer(endpointId, bytes, connectedPeers.keys)
+                relayCore.offer(endpointId, bytes, connectionManager.connectedPeers.keys)
+
+                enqueuePendingPayload(endpointId, bytes)
 
                 val b64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
                 val event = JSObject().apply {
                     put("peerId", endpointId)
                     put("bytesBase64", b64)
                 }
-                notifyListeners("payloadReceived", event)
+                // retainUntilConsumed=true: if no JS listener is currently attached (WebView
+                // paused/reloading), Capacitor retains this event and delivers it once one attaches.
+                notifyListeners("payloadReceived", event, true)
             }
         }
 
         override fun onPayloadTransferUpdate(endpointId: String, update: PayloadTransferUpdate) {
             if (update.status == PayloadTransferUpdate.Status.SUCCESS) {
-                peerLastActivityMs[endpointId] = System.currentTimeMillis()
+                connectionManager.markActive(endpointId)
                 val event = JSObject().apply {
                     put("peerId", endpointId)
                     put("rssi", -58)
@@ -150,25 +146,24 @@ class NearbyMeshPlugin : Plugin() {
 
     private val connectionLifecycleCallback = object : ConnectionLifecycleCallback() {
         override fun onConnectionInitiated(endpointId: String, info: ConnectionInfo) {
-            val parsed = parseEndpointName(info.endpointName)
-            if (parsed != null && parsed.version != PROTOCOL_VERSION) {
+            val parsed = connectionManager.parseEndpointName(info.endpointName)
+            if (!connectionManager.isVersionCompatible(parsed)) {
                 // Incompatible protocol version — reject rather than connect to a peer we can't
                 // safely exchange wire-format packets with.
                 connectionsClient.rejectConnection(endpointId)
                 return
             }
 
-            // Respect 4-neighbor concurrent P2P_CLUSTER cap by rotating the oldest idle peer if full
-            rotateOldestIdlePeerIfNeeded(endpointId)
-            connectedPeers[endpointId] = parsed?.displayName ?: info.endpointName
-            peerLastActivityMs[endpointId] = System.currentTimeMillis()
+            // Respect the concurrent P2P_CLUSTER cap by rotating the oldest idle peer if full
+            connectionManager.rotateOldestIdlePeerIfNeeded(endpointId)
+            connectionManager.registerConnected(endpointId, parsed?.displayName ?: info.endpointName)
             connectionsClient.acceptConnection(endpointId, payloadCallback)
         }
 
         override fun onConnectionResult(endpointId: String, result: ConnectionResolution) {
             if (result.status.statusCode == ConnectionsStatusCodes.STATUS_OK) {
-                val peerName = connectedPeers[endpointId] ?: "PEER-$endpointId"
-                peerLastActivityMs[endpointId] = System.currentTimeMillis()
+                val peerName = connectionManager.connectedPeers[endpointId] ?: "PEER-$endpointId"
+                connectionManager.markActive(endpointId)
                 val event = JSObject().apply {
                     put("peerId", endpointId)
                     put("displayName", peerName)
@@ -177,54 +172,39 @@ class NearbyMeshPlugin : Plugin() {
                 }
                 notifyListeners("peerFound", event)
             } else {
-                connectedPeers.remove(endpointId)
-                peerLastActivityMs.remove(endpointId)
+                connectionManager.unregister(endpointId)
             }
         }
 
         override fun onDisconnected(endpointId: String) {
-            connectedPeers.remove(endpointId)
-            peerLastActivityMs.remove(endpointId)
-            val event = JSObject().apply {
-                put("peerId", endpointId)
-            }
-            notifyListeners("peerLost", event)
+            connectionManager.unregister(endpointId)
+            notifyListeners("peerLost", JSObject().put("peerId", endpointId))
         }
     }
 
     private val endpointDiscoveryCallback = object : EndpointDiscoveryCallback() {
         override fun onEndpointFound(endpointId: String, info: DiscoveredEndpointInfo) {
-            if (connectedPeers.containsKey(endpointId)) return
+            if (connectionManager.isConnected(endpointId)) return
 
-            val parsed = parseEndpointName(info.endpointName)
-            if (parsed != null && parsed.version != PROTOCOL_VERSION) {
+            val parsed = connectionManager.parseEndpointName(info.endpointName)
+            if (!connectionManager.isVersionCompatible(parsed)) {
                 return // Incompatible protocol version — never initiate towards it.
             }
+            if (!connectionManager.shouldInitiate(localNodeId, parsed?.nodeId)) {
+                return // Deterministic tie-break: the other side initiates.
+            }
 
-            // Deterministic tie-break: only the lower-nodeId side initiates requestConnection.
-            // Both sides advertise AND discover simultaneously (P2P_CLUSTER), so without this,
-            // both could call requestConnection() on the same endpoint pair at once. If we can't
-            // parse the remote's node ID (older/foreign peer), fall back to always initiating
-            // rather than silently never connecting.
-            val remoteNodeId = parsed?.nodeId
-            val weInitiate = remoteNodeId == null || localNodeId < remoteNodeId
-            if (!weInitiate) return
-
-            rotateOldestIdlePeerIfNeeded(endpointId)
+            connectionManager.rotateOldestIdlePeerIfNeeded(endpointId)
             connectionsClient.requestConnection(
-                encodeEndpointName(localNodeId, localDisplayName),
+                connectionManager.encodeEndpointName(localNodeId, localDisplayName),
                 endpointId,
                 connectionLifecycleCallback
             )
         }
 
         override fun onEndpointLost(endpointId: String) {
-            connectedPeers.remove(endpointId)
-            peerLastActivityMs.remove(endpointId)
-            val event = JSObject().apply {
-                put("peerId", endpointId)
-            }
-            notifyListeners("peerLost", event)
+            connectionManager.unregister(endpointId)
+            notifyListeners("peerLost", JSObject().put("peerId", endpointId))
         }
     }
 
@@ -241,7 +221,7 @@ class NearbyMeshPlugin : Plugin() {
             .build()
 
         connectionsClient.startAdvertising(
-            encodeEndpointName(localNodeId, localDisplayName),
+            connectionManager.encodeEndpointName(localNodeId, localDisplayName),
             serviceId,
             connectionLifecycleCallback,
             options
@@ -276,8 +256,8 @@ class NearbyMeshPlugin : Plugin() {
         connectionsClient.stopAdvertising()
         connectionsClient.stopDiscovery()
         connectionsClient.stopAllEndpoints()
-        connectedPeers.clear()
-        peerLastActivityMs.clear()
+        connectionManager.clear()
+        pendingPayloadRing.clear()
         stopMeshForegroundService()
         call.resolve()
     }
@@ -288,7 +268,7 @@ class NearbyMeshPlugin : Plugin() {
         val b64 = call.getString("bytesBase64") ?: return call.reject("Missing bytesBase64")
         val bytes = Base64.decode(b64, Base64.NO_WRAP)
 
-        peerLastActivityMs[peerId] = System.currentTimeMillis()
+        connectionManager.markActive(peerId)
         connectionsClient.sendPayload(peerId, Payload.fromBytes(bytes))
             .addOnSuccessListener {
                 call.resolve(JSObject().put("sent", true))
@@ -301,7 +281,7 @@ class NearbyMeshPlugin : Plugin() {
     @PluginMethod
     fun getPeers(call: PluginCall) {
         val array = JSArray()
-        for ((id, name) in connectedPeers.entries) {
+        for ((id, name) in connectionManager.connectedPeers.entries) {
             val item = JSObject().apply {
                 put("peerId", id)
                 put("displayName", name)
@@ -311,6 +291,28 @@ class NearbyMeshPlugin : Plugin() {
             array.put(item)
         }
         call.resolve(JSObject().put("peers", array))
+    }
+
+    /**
+     * Explicitly drains the bounded pending-payload ring buffer (see [pendingPayloadRing]) back
+     * to JS as a resume-time backstop, in case the WebView missed `payloadReceived` events for
+     * any reason despite `retainUntilConsumed`. Safe to call unconditionally on app resume.
+     */
+    @PluginMethod
+    fun drainPendingPayloads(call: PluginCall) {
+        val array = JSArray()
+        var item = pendingPayloadRing.poll()
+        while (item != null) {
+            val (peerId, bytes) = item
+            array.put(
+                JSObject().apply {
+                    put("peerId", peerId)
+                    put("bytesBase64", Base64.encodeToString(bytes, Base64.NO_WRAP))
+                }
+            )
+            item = pendingPayloadRing.poll()
+        }
+        call.resolve(JSObject().put("payloads", array))
     }
 
     @PluginMethod
