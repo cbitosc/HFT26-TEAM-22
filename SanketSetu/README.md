@@ -239,14 +239,34 @@ UNVERIFIED until a human runs it on real hardware.
 3. **1:30 – 2:25 | 4-Node Multi-Hop, Link Break & Congestion Benchmark (`SIMULATOR`):**
    - Open `SIMULATOR`. Click **"1. Send E2E Message A → D (3 Hops)"** and inspect the hop path (`A → B → C → D`), Ed25519 signature, and `XSalsa20-Poly1305` ciphertext in the Packet Inspector.
    - Click **"2. Break Middle Link (B↔C)"**, send another message (`PENDING / SENT` in Outbox), then click **"2. Restore Middle Link (B↔C) & Sync"** to watch `SYNC_INV` deliver it automatically (`DELIVERED`).
-   - Click **"4. Congestion Benchmark (P0 SOS vs P2/P3)"** to flood 8 normal packets while firing a `P0` SOS and view the side-by-side latency speedup in the **Mesh Quality** panel.
+   - Run **"4. Congestion Benchmark (P0 SOS vs P2/P3)"** to compare simulated SOS latency with normal traffic. The panel labels estimates as `SIMULATED`; this aggregate result does not provide p50/p95 distributions.
 4. **2:25 – 3:00 | Safety Circles, Hazard Map & Optional Online AI (`SAFE & HAZARDS` / `AI TRIAGE`):**
    - Send a 1-tap **"I'm Safe"** family circle check-in and view signed hazard reports on the `MESH MAP`.
    - Open `AI TRIAGE` to show that when offline, the rule-based keyword classifier runs locally while Featherless.ai is cleanly disabled; when online, AI triage outputs carry the `"AI suggestion, use your judgment."` disclaimer.
 
 ---
 
-## 9. Attribution & Disclosure
+## 9. Screenshots
+
+Capture screenshots in the default light theme. For browser captures, run `npm run dev`, open
+`http://localhost:3000`, and set the browser viewport to **360 × 800** (also check 412 × 915).
+For Android, install the debug APK, set the app to light mode in **More → Settings**, open the
+screen to capture, then run:
+
+```bash
+mkdir -p docs/screenshots
+adb exec-out screencap -p > docs/screenshots/home-light.png
+```
+
+Repeat for `sos-tracker-light.png`, `packet-inspector-light.png`,
+`simulator-light.png`, and `map-light.png`, opening each screen before capture. Keep the
+`SIMULATED` or `REAL RADIO` indicator visible in captures that show mesh status. Add approved
+images to this section with Markdown image links; no device screenshots are checked in yet.
+
+See [UI performance notes](docs/UI_PERFORMANCE.md) for current production chunk sizes and what
+has not been measured on a real phone.
+
+## 10. Attribution & Disclosure
 
 - All mesh engine, cryptography (`Ed25519` / `X25519` / `XSalsa20-Poly1305`), responder certificate authority, sealed location, store-and-forward outbox, anti-entropy sync, virtual multi-node simulator, and Android Capacitor `NearbyMeshPlugin` code was written for **Sanket Setu** by Team Astra.
-- The visual design system (CSS tokens, typography, and 3D WebGL status orb aesthetic) adapts the NOVA UI template as permitted by the hackathon prompt.
+- The visual design uses a light-first safety interface with bundled Noto Sans fonts. The optional 3D mesh visual is off by default and can be enabled in Settings.
