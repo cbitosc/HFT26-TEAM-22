@@ -17,6 +17,33 @@ cannot substitute for this.
 - [ ] Runtime permissions granted on first launch: Nearby devices / Bluetooth, Location
       (if offered), Notifications.
 
+## 0. 10-minute minimum smoke test (do this first — if it fails, stop and fix before anything else)
+
+This is the smallest test that proves the core claim ("two phones exchange a real message over
+real radio, no network") is actually true. Everything after this section is deeper verification;
+this section alone is the bar for "it works at all."
+
+- [ ] **(0-2 min)** Build the debug APK and install on two phones (exact commands at the end of
+      `README.md`'s build section — `./gradlew installDebug` with each phone connected via USB
+      debugging, one at a time, or `adb install -r app-debug.apk` for an already-built APK).
+- [ ] **(2-3 min)** On both phones: open the app, complete onboarding, tap "grant access" on the
+      permissions card, and grant every system permission dialog that appears.
+- [ ] **(3-4 min)** Put both phones in Airplane Mode, then manually turn Bluetooth and Wi-Fi back
+      on (proves no cellular/internet path is involved).
+- [ ] **(4-6 min)** Bring the phones within a few meters of each other. Watch the top bar's peer
+      badge on both — it must flip from `SIMULATED` to `REAL RADIO` once they connect to each
+      other (not just to the seeded demo peers). If it never flips, stop here — the two phones
+      never actually linked over Nearby Connections; check Logcat for `NearbyMeshPlugin` /
+      `SanketRelayCore` errors before continuing to anything below.
+- [ ] **(6-8 min)** From phone A, send a direct message to phone B (pick B from the peer list on
+      the Messages screen — may require scanning B's QR/trust code first if not already known).
+- [ ] **(8-10 min)** Confirm the message appears on phone B, and that phone A's copy of the
+      message shows delivery state **DELIVERED** (not stuck at PENDING or SENT) within a few
+      seconds. Open the packet inspector and confirm `route` shows the real hop between the two
+      real node IDs.
+
+**Result:** PASS / FAIL (circle one) — date tested: __________ — devices used: __________
+
 ## 1. Basic two-phone pairing and messaging (airplane mode, BT+Wi-Fi on)
 
 - [ ] Put both phones in Airplane Mode, then manually re-enable Bluetooth and Wi-Fi (confirms no
@@ -110,5 +137,5 @@ cannot substitute for this.
 
 **Status:** every box above is UNVERIFIED as of this document's creation. The code has been
 built and compiles (`./gradlew assembleDebug` succeeds — see README), and the mesh protocol
-logic is unit-tested against simulated transports (`npm test`, 17/17 passing), but none of the
+logic is unit-tested against simulated transports (`npm test`, 20/20 passing), but none of the
 above has been run against real Android radios yet.
