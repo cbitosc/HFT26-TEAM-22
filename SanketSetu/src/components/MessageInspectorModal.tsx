@@ -1,6 +1,6 @@
 /**
  * 3-Tab Message & Packet Inspector (src/components/MessageInspectorModal.tsx)
- * Maps NOVA's 3-tab Live Demo Inspector pattern directly to §8.4:
+ * Packet inspector with route, packet, and crypto details:
  * - Tab 1: Route (hop path chain, delivery state, reached nodes receipts)
  * - Tab 2: Packet (wire header JSON, TTL, hops, priority, byte size)
  * - Tab 3: Crypto (live Ed25519 signature verification, X25519/Channel cipher suite, SHA-256 hash)

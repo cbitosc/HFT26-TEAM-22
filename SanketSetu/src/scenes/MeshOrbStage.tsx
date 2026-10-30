@@ -1,7 +1,7 @@
 /**
  * Live Mesh Status 3D / Battery-Aware Orb Stage (src/scenes/MeshOrbStage.tsx)
  * Per §6 & §8.3:
- * - Preserves the exact NOVA glossy iridescent glass Orb + orbiting peer dots (one per connected peer).
+ * - Optional 3D mesh visualization with peer dots, enabled only by the user in Settings.
  * - Semantic states:
  *   - `idle`: lilac (var(--relay))
  *   - `scanning`: gentle pulse

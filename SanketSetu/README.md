@@ -24,7 +24,7 @@ When floods, earthquakes, cyclones, or infrastructure blackouts sever cellular t
 
 ```text
 +-----------------------------------------------------------------------------------+
-|                        UI LAYER (React 19 + TypeScript + NOVA UI)                 |
+|                    UI LAYER (React 19 + TypeScript + light-first safety UI)        |
 |  Home · E2E Messages · Closed-Loop SOS · Responder Feed · Circles · Map · Sim     |
 |  Packet / Route / Crypto Inspector · Mesh Quality Telemetry · Optional Online AI  |
 +-----------------------------------------+-----------------------------------------+
@@ -235,10 +235,10 @@ UNVERIFIED until a human runs it on real hardware.
    - Show the **4-Step Closed-Loop SOS Tracker** (`1. Broadcast Sent → 2. Relayed by N Peers → 3. Verified Responder ACK → 4. Help En Route`).
 2. **0:40 – 1:30 | Verified Responder Certs & Sealed Precise GPS (`RESPONDER FEED`):**
    - Open `RESPONDER FEED`. Point out that unverified civilian nodes only see coarse (`~1 km`) coordinates (`SEALED TO RESPONDER KEY`).
-   - Click **"Enroll as Verified NDRF Medic (DEMO AUTHORITY)"** — watch the sealed `X25519-XSalsa20-Poly1305` GPS payload unlock exact coordinates (`±8m`) and emit a cryptographically verified `SOS_ACK`.
+   - Use the simulator's responder tools to show the verified responder badge and sealed location flow. The simulated responder is marked as a demo; real responder enrollment and GPS accuracy need device testing.
 3. **1:30 – 2:25 | 4-Node Multi-Hop, Link Break & Congestion Benchmark (`SIMULATOR`):**
-   - Open `SIMULATOR`. Click **"1. Send E2E Message A → D (3 Hops)"** and inspect the hop path (`A → B → C → D`), Ed25519 signature, and `XSalsa20-Poly1305` ciphertext in the Packet Inspector.
-   - Click **"2. Break Middle Link (B↔C)"**, send another message (`PENDING / SENT` in Outbox), then click **"2. Restore Middle Link (B↔C) & Sync"** to watch `SYNC_INV` deliver it automatically (`DELIVERED`).
+   - Open `SIMULATOR`. Click **"1. send e2e message a → d (3 hops)"** and inspect the route and packet in the Packet Inspector.
+   - Click **"2. break middle link (b↔c)"**, send another message, then click **"2. restore middle link (b↔c) & sync"** to see the queued simulator packet resume.
    - Run **"4. Congestion Benchmark (P0 SOS vs P2/P3)"** to compare simulated SOS latency with normal traffic. The panel labels estimates as `SIMULATED`; this aggregate result does not provide p50/p95 distributions.
 4. **2:25 – 3:00 | Safety Circles, Hazard Map & Optional Online AI (`SAFE & HAZARDS` / `AI TRIAGE`):**
    - Send a 1-tap **"I'm Safe"** family circle check-in and view signed hazard reports on the `MESH MAP`.
