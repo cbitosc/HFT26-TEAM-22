@@ -17,42 +17,44 @@ cannot substitute for this.
 - [ ] Runtime permissions granted on first launch: Nearby devices / Bluetooth, Location
       (if offered), Notifications.
 
-## 0. 10-minute minimum smoke test (do this first — if it fails, stop and fix before anything else)
+## 0. The 10-minute two-phone test (do this first; if it fails, stop and send the diagnostics)
 
-This is the smallest test that proves the core claim ("two phones exchange a real message over
-real radio, no network") is actually true. Everything after this section is deeper verification;
-this section alone is the bar for "it works at all."
+This is the smallest test that proves the core claim: two phones exchange a real message, a real
+SOS and a real acknowledgement over real radio, with no network. Everything below it is deeper
+verification. Nothing here is verified until a human ticks it.
 
-- [ ] **(0-2 min)** Build the debug APK and install on two phones (exact commands at the end of
-      `README.md`'s build section — `./gradlew installDebug` with each phone connected via USB
-      debugging, one at a time, or `adb install -r app-debug.apk` for an already-built APK).
-- [ ] **(2-3 min)** On both phones: open the app, complete onboarding, tap "grant access" on the
-      permissions card, and grant every system permission dialog that appears.
-- [ ] **(3-4 min)** Put both phones in Airplane Mode, then manually turn Bluetooth and Wi-Fi back
-      on (proves no cellular/internet path is involved).
-- [ ] **(4-6 min)** Bring the phones within a few meters of each other. Watch the top bar's peer
-      badge on both — it must flip from `SIMULATED` to `REAL RADIO` once they connect to each
-      other (not just to the seeded demo peers). If it never flips, stop here — the two phones
-      never actually linked over Nearby Connections; check Logcat for `NearbyMeshPlugin` /
-      `SanketRelayCore` errors before continuing to anything below.
-- [ ] **(6-8 min)** From phone A, send a direct message to phone B (pick B from the peer list on
-      the Messages screen — may require scanning B's QR/trust code first if not already known).
-- [ ] **(8-10 min)** Confirm the message appears on phone B, and that phone A's copy of the
-      message shows delivery state **DELIVERED** (not stuck at PENDING or SENT) within a few
-      seconds. Open the packet inspector and confirm `route` shows the real hop between the two
-      real node IDs.
+Phones A and B, both Android 8+ with Google Play services, internet off.
 
-**Result:** PASS / FAIL (circle one) — date tested: __________ — devices used: __________
+- [ ] **1. Install.** Install the debug APK on **both** phones (`adb -s <serial> install -r app/build/outputs/apk/debug/app-debug.apk`, commands in the README).
+- [ ] **2. Permissions.** Open the app on both, finish the three setup steps and **grant every permission** (Nearby devices / Bluetooth, Notifications, Location on Android 12 and older). Set different names, for example "Asha" and "Bala".
+- [ ] **3. Airplane mode.** Switch both phones to airplane mode, then switch **Bluetooth and Wi-Fi back on**.
+- [ ] **4. Radio diagnostics on both.** More > Radio diagnostics. Confirm **Advertising: yes** and **Discovering: yes**, foreground service yes, and every listed permission "granted". If a row shows an error code, press **Copy diagnostics** and keep it.
+- [ ] **5. Connect.** Hold the phones within a few metres. Within about 30 seconds the top strip on both shows **1 phone nearby** and Home says **Connected to 1 phone.** Diagnostics shows **Endpoints connected: 1** with the other phone's name. If not, stop and copy diagnostics from both phones (see "If it fails").
+- [ ] **6. Everyone nearby.** On A: Chat > Everyone nearby, send "hello". It appears on B, labelled with A's name. A's bubble reads **Sent**.
+- [ ] **7. Private message.** On A: Chat > Nearby people > B, send "private test". It appears on B in a private thread. A's bubble moves from Sent to **Delivered** (only after B's signed acknowledgement).
+- [ ] **8. SOS.** On A: Home, **press and hold** the SOS button for 3 seconds. On B: the full-screen SOS card appears with **vibration and sound**, and an Android notification is posted; the SOS is at the top of Alerts.
+- [ ] **9. Acknowledge.** On B: tap **Acknowledge**. A's SOS status card shows **Acknowledged by Bala** and **Reached 1 phone**.
+- [ ] **10. Screen off.** Lock B's screen. On A send another message and another SOS. B still receives it (notification and vibration with the screen off).
+
+**Result:** PASS / FAIL (circle one). Date: __________ Devices and Android versions: __________
+
+### If it fails
+
+On **both** phones: More > Radio diagnostics > **Copy diagnostics**, paste into a file. Also capture
+`adb -s <serial> logcat -d | grep -i SanketMesh` for each phone. The diagnostics screen answers, in order:
+permissions missing (fix and press Restart radio) > Bluetooth or Wi-Fi off > advertising/discovering
+no with an error code > endpoints found but not connected > connected but no payloads > payloads
+received but a drop reason shown under "Last dropped packet".
 
 ## 0b. Added since the first checklist (all UNVERIFIED on real phones)
 
 - [ ] **First run:** splash shows real init steps, onboarding appears once, **Allow permissions** raises the Android dialogs for the API level of the phone (API 31+: Nearby/Bluetooth; API 33+: Nearby Wi-Fi and notifications). Deny them once: setup still completes and the Open settings button works.
 - [ ] **PIN:** set a PIN, force-stop the app, reopen: the PIN screen appears; a wrong PIN is rejected; the right PIN opens the app and the same node id.
 - [ ] **Restart recovery:** with the other phone out of range, send a message and an SOS; force-stop and reopen; bring the other phone in range. The queued message and SOS are re-sent without any tap, and the message reaches DELIVERED.
-- [ ] **SOS repeats until verified ack:** an SOS from phone A keeps appearing at B until B (enrolled as demo responder) acknowledges; an acknowledgement from a non-enrolled phone shows Unverified and A keeps repeating.
+- [ ] **SOS repeats until verified ack:** an SOS from phone A keeps appearing at B until B (enrolled as demo responder) acknowledges; an acknowledgement from a non-enrolled phone shows "Acknowledged by" without a verified badge and A keeps repeating.
 - [ ] **Launch flash:** with the phone in system dark mode, cold start shows a light splash, never a dark flash. (Needs a rebuilt APK: the splash theme was changed without the SDK available to compile it.)
 - [ ] **Release performance:** judge scrolling and the SOS hold ring on a RELEASE build on a mid-range phone, not an emulator.
-- [ ] **Rescuer Locate** is expected to show simulated signal values on real radios (Nearby does not expose RSSI). Confirm it is labelled EXPERIMENTAL and SIMULATED.
+- [ ] **Rescuer Locate** (simulated signal values, Nearby does not expose RSSI) must not appear anywhere in Real mode; it exists only in Demo mode.
 
 ## 1. Basic two-phone pairing and messaging (airplane mode, BT+Wi-Fi on)
 

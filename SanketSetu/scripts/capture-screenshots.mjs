@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Captures README screenshots (light theme, 360x800) from a running preview/dev server.
+// Captures README screenshots (light theme, 360x800, Demo mode) from a running preview/dev server.
 // Usage: npm run build && npx vite preview --port 4173 & node scripts/capture-screenshots.mjs
 // Needs Google Chrome. Drives a fresh profile through onboarding, then screenshots each screen.
 import { spawn } from 'node:child_process';
@@ -48,7 +48,9 @@ const go = async (hash, name, after) => {
   if (after) await after();
   await shot(name);
 };
-await go('', 'home');
+// Browser captures have no radio, so they are taken in Demo mode (every screen carries the amber banner).
+await ev(`location.hash='#/settings'`); await sleep(700); await clickText('Demo'); await sleep(2500);
+await go('home', 'home');
 await go('sos', 'sos');
 await go('messages', 'chat');
 await go('alerts', 'alerts');

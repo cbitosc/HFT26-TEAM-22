@@ -45,8 +45,10 @@ flowchart LR
 - `src/core/protocol/constants.ts`: every TTL, jitter, window and threshold in one file.
 - `src/mesh`, `src/crypto`, `src/transport`, `src/db`: core logic. An architecture test fails the build if these import UI code.
 - `plugins/nearby-mesh/android`: Kotlin plugin and foreground service.
-- On a phone the engine runs on **both** the real radio and the simulated demo mesh, so the demo
-  works with one device. The status strip says **Real radio** only when a real Nearby peer is connected.
+- **Real vs Demo mode.** The app starts in **Real** mode on a phone: the only transport is the Nearby
+  radio, and peers, messages, alerts and stats come only from real engine events. **Demo** mode (Settings,
+  "Demo", plus the Simulator screen) is the only place simulated phones and fixtures exist, and it shows a
+  permanent amber "DEMO MODE: simulated phones, not real" banner. The status strip always says `REAL RADIO` or `DEMO`.
 
 ## 4. Requirement traceability
 
@@ -136,10 +138,19 @@ export JAVA_HOME="$(brew --prefix openjdk@21)" ANDROID_HOME="$HOME/Library/Andro
 ./gradlew assembleDebug     # android/app/build/outputs/apk/debug/app-debug.apk
 ```
 
+Install on two phones and capture logs (replace the serials from `adb devices`):
+
+```bash
+adb devices
+adb -s <serialA> install -r app/build/outputs/apk/debug/app-debug.apk
+adb -s <serialB> install -r app/build/outputs/apk/debug/app-debug.apk
+adb -s <serialA> logcat -c && adb -s <serialA> logcat | grep -i SanketMesh   # one terminal per phone
+```
+
 Open `SanketSetu/android` (not the repo root) in Android Studio and decline any Gradle upgrade prompt:
 the project is pinned to Gradle 8.14.3 and AGP 8.13. Real mesh behaviour needs two or more physical
 phones; follow [docs/HARDWARE_TEST_CHECKLIST.md](docs/HARDWARE_TEST_CHECKLIST.md) (start with the
-10-minute smoke test).
+10-minute two-phone test).
 
 ### Static demo site
 
@@ -147,7 +158,7 @@ phones; follow [docs/HARDWARE_TEST_CHECKLIST.md](docs/HARDWARE_TEST_CHECKLIST.md
 
 ## 9. Tests
 
-`npm test` runs 28 deterministic tests with `node:test` (no network, no real clock dependence beyond
+`npm test` runs 38 deterministic tests with `node:test` (no network, no real clock dependence beyond
 short waits): signatures, tamper and replay rejection, forged ACKs, TTL, dedup, jitter and
 suppression, priority under flood, rate limiting, 4-node multi-hop, link break and sync, outbox retry
 and restore, sealed GPS, responder certificates, identity vault, geo clustering, benchmark statistics,
@@ -171,9 +182,9 @@ measured on a phone; judge them on a release build, not an emulator.
 - **Signature verification runs on the main thread**, not a Web Worker. Under a packet flood this can cause UI jank.
 - The PIN KDF is an iterated SHA-512 stretch, not a vetted KDF; Android Keystore wrapping is not wired in. Without a PIN, the key sits beside its ciphertext.
 - Only this phone's own messages, SOS alerts and outbox are restored after a restart; received message history is not.
-- RSSI and link quality for real peers are constant placeholders (Nearby Connections does not expose them), so Rescuer Locate is a simulated prototype.
+- RSSI and link quality for real peers are constant placeholders (Nearby Connections does not expose them), so Rescuer Locate exists only in Demo mode, as a simulated prototype.
 - The Responder Authority and its group key are a built-in **DEMO** authority; there is no revocation or key rotation.
-- No Android SDK was available when the last native changes (splash theme) were written, so rebuild before relying on them.
+- Everything about the real radio path (permissions, advertising, discovery, connection, notifications, vibration) is **UNVERIFIED on hardware**: it is covered by integration tests against a fake native bridge and by a successful `assembleDebug`, not by a two-phone run. See the checklist.
 
 ## 12. Screenshots
 
