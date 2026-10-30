@@ -1,8 +1,8 @@
 /**
  * First-run onboarding (src/screens/OnboardingScreen.tsx): three short steps.
  * 1. What the app does. 2. Why each permission is needed + the real OS request (native only).
- * 3. Name, optional PIN (skippable with a clear warning), language. Denied permissions never block
- * setup: the app still runs on the simulated mesh and says so.
+ * 3. Name and optional PIN (skippable with a clear warning). Denied permissions never block
+ * setup; Home explains what is missing and offers to ask again.
  */
 
 import { useEffect, useState } from 'react';
@@ -20,14 +20,12 @@ interface OnboardingScreenProps {
   onCompleteNavigate: (screen: AppScreenId) => void;
 }
 
-const LANGUAGES = ['English', 'Hindi', 'Telugu', 'Tamil'] as const;
-
 const PERMISSION_ROWS: { key: keyof MeshPermissionState; title: string; why: string }[] = [
   { key: 'bluetoothScan', title: 'Find nearby phones', why: 'Bluetooth scan: discover other Sanket Setu phones with no internet.' },
-  { key: 'bluetoothAdvertise', title: 'Be found by nearby phones', why: 'Bluetooth advertise: lets others see and relay through your phone.' },
+  { key: 'bluetoothAdvertise', title: 'Be found by nearby phones', why: 'Bluetooth advertise: lets other phones see yours and pass messages through it.' },
   { key: 'bluetoothConnect', title: 'Connect to them', why: 'Bluetooth connect: opens the encrypted link used to exchange messages.' },
   { key: 'nearbyWifi', title: 'Faster transfers', why: 'Nearby Wi-Fi devices: switches to Wi-Fi Direct when it is available.' },
-  { key: 'notifications', title: 'Keep relaying', why: 'Notifications: shows the "mesh active" notice that keeps the radio running with the screen off.' },
+  { key: 'notifications', title: 'Keep running in your pocket', why: 'Notifications: shows the "Sanket Setu is active" notice that keeps the radio running with the screen off, and alerts you to an SOS.' },
   { key: 'fineLocation', title: 'SOS location (optional)', why: 'Location is used only if you choose to attach it to an SOS. Exact position is sealed to verified responders.' },
 ];
 
@@ -38,6 +36,7 @@ export function OnboardingScreen({ onCompleteNavigate }: OnboardingScreenProps) 
   const checkMeshPermissions = useMeshStore((s) => s.checkMeshPermissions);
   const requestMeshPermissions = useMeshStore((s) => s.requestMeshPermissions);
   const openAppSettings = useMeshStore((s) => s.openAppSettings);
+  const ensureRadio = useMeshStore((s) => s.ensureRadio);
   const isNative = Capacitor.isNativePlatform();
 
   const [step, setStep] = useState(1);
@@ -46,7 +45,6 @@ export function OnboardingScreen({ onCompleteNavigate }: OnboardingScreenProps) 
   const [pin, setPin] = useState('');
   const [pinConfirm, setPinConfirm] = useState('');
   const [skipPin, setSkipPin] = useState(false);
-  const [language, setLanguage] = useState<string>('English');
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -75,9 +73,11 @@ export function OnboardingScreen({ onCompleteNavigate }: OnboardingScreenProps) 
       await completeOnboarding({
         displayName: name,
         pin: skipPin ? undefined : pin,
-        language,
+        language: 'English',
         powerMode: 'active',
       });
+      // Start the radio now that the name is set, so Home already says "Looking for phones nearby...".
+      await ensureRadio();
       onCompleteNavigate('home');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not finish setup.');
@@ -93,11 +93,11 @@ export function OnboardingScreen({ onCompleteNavigate }: OnboardingScreenProps) 
       {step === 1 && (
         <>
           <BridgeLogo className="mx-auto w-48" />
-          <h1 className="text-[1.75rem] leading-tight font-bold text-[var(--fg)]">Messages and SOS when networks fail</h1>
+          <h1 className="text-[1.75rem] leading-tight font-bold text-[var(--fg)]">Message and send SOS with no internet</h1>
           <ul className="flex flex-col gap-3">
             {[
               { icon: Radio, text: 'Phones talk directly to each other over Bluetooth and Wi-Fi Direct. No internet or cell signal needed.' },
-              { icon: MessageSquareLock, text: 'If someone is out of range, nearby phones pass your message along. It is encrypted so relays cannot read it.' },
+              { icon: MessageSquareLock, text: 'If someone is out of range, nearby phones pass your message along. It is encrypted, so phones passing it along cannot read it.' },
               { icon: Siren, text: 'SOS goes to everyone nearby and repeats until a verified responder acknowledges it.' },
             ].map(({ icon: Icon, text }) => (
               <li key={text} className="flex items-start gap-3 text-base text-[var(--fg)]">
@@ -117,7 +117,7 @@ export function OnboardingScreen({ onCompleteNavigate }: OnboardingScreenProps) 
           </p>
           {!isNative && (
             <Card className="p-3 text-sm text-[var(--fg-secondary)]">
-              Browser preview: Android permissions are not requested here. The simulated mesh still works.
+              Browser preview: there is no phone radio here, so no phones can connect. Install the Android app on two phones to use it.
             </Card>
           )}
           <ul className="flex flex-col gap-2">
@@ -144,7 +144,7 @@ export function OnboardingScreen({ onCompleteNavigate }: OnboardingScreenProps) 
           {isNative && permissionState && !permissionState.allGranted && (
             <div role="alert" className="flex items-start gap-2 rounded-[var(--radius)] border border-[var(--line)] bg-[var(--warn-tint)] p-3 text-sm text-[var(--warn-ink)]">
               <ShieldAlert aria-hidden="true" className="mt-0.5 h-5 w-5 shrink-0" />
-              Without these permissions phones cannot find each other. You can continue and see the simulated mesh, and allow them later in Settings.
+              Without these permissions phones cannot find each other. You can continue and allow them later from Home.
             </div>
           )}
           {isNative && (
@@ -163,7 +163,7 @@ export function OnboardingScreen({ onCompleteNavigate }: OnboardingScreenProps) 
 
       {step === 3 && (
         <>
-          <h1 className="text-[1.75rem] leading-tight font-bold text-[var(--fg)]">Your name and key</h1>
+          <h1 className="text-[1.75rem] leading-tight font-bold text-[var(--fg)]">Your name</h1>
           <p className="text-base text-[var(--fg-secondary)]">
             Your phone creates its own signing and encryption keys. They never leave the device.
           </p>
@@ -171,13 +171,6 @@ export function OnboardingScreen({ onCompleteNavigate }: OnboardingScreenProps) 
             Name shown to others
             <input value={name} onChange={(e) => setName(e.target.value)} maxLength={32} autoComplete="off"
               className="min-h-12 rounded-[var(--radius-sm)] border border-[var(--line)] bg-[var(--surface)] px-3 text-base font-normal text-[var(--fg)]" />
-          </label>
-          <label className="flex flex-col gap-1 text-base font-semibold text-[var(--fg)]">
-            Language for SOS pictograms
-            <select value={language} onChange={(e) => setLanguage(e.target.value)}
-              className="min-h-12 rounded-[var(--radius-sm)] border border-[var(--line)] bg-[var(--surface)] px-3 text-base font-normal text-[var(--fg)]">
-              {LANGUAGES.map((l) => <option key={l}>{l}</option>)}
-            </select>
           </label>
 
           <Card className="flex flex-col gap-3 p-4">

@@ -207,6 +207,7 @@ export interface MeshStoreState {
   }) => Promise<StoredSOSAlert>;
   cancelActiveSOS: () => void;
   dismissIncomingAlert: () => void;
+  setLanguage: (language: string) => void;
   markAlertsSeen: () => void;
   respondToSOS: (
     alertId: string,
@@ -926,6 +927,8 @@ export const useMeshStore = create<MeshStoreState>((set, get) => ({
     const savedAiModel = await loadKvJson<string>('featherless_model');
     const savedCert = await loadKvJson<ResponderCertificate>('responder_cert');
     const savedMode = await loadKvJson<AppMode>('app_mode');
+    const savedLanguage = await loadKvJson<string>('ui_language');
+    if (savedLanguage) set({ language: savedLanguage });
     set({ appMode: savedMode === 'real' || savedMode === 'demo' ? savedMode : get().appMode });
     const savedTheme = await loadKvJson<ThemeMode>('ui_theme');
     const savedVisuals3D = await loadKvJson<boolean>('ui_visuals_3d');
@@ -1263,6 +1266,11 @@ export const useMeshStore = create<MeshStoreState>((set, get) => ({
     set({ activeSosId: alert.id, inspectedMessageId: alert.id });
     syncStoreFromEngine(set, get);
     return alert;
+  },
+
+  setLanguage: (language) => {
+    set({ language });
+    void saveKvJson('ui_language', language);
   },
 
   dismissIncomingAlert: () => {

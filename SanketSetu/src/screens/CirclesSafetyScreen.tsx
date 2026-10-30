@@ -31,6 +31,7 @@ export function CirclesSafetyScreen({ onNavigate }: CirclesSafetyScreenProps) {
   const hazards = useMeshStore((s) => s.hazards);
   const peers = useMeshStore((s) => s.peers);
   const sendImSafeToCircle = useMeshStore((s) => s.sendImSafeToCircle);
+  const appMode = useMeshStore((s) => s.appMode);
   const simulatePeerSafeCheckIn = useMeshStore(
     (s) => s.simulatePeerSafeCheckIn
   );
@@ -192,7 +193,7 @@ export function CirclesSafetyScreen({ onNavigate }: CirclesSafetyScreenProps) {
                     Circle Key Fingerprint: {activeCircle.circleKeyHint} · Synced via SYNC_INV
                   </p>
                 </div>
-                {peers[0] && (
+                {appMode === 'demo' && peers[0] && (
                   <button
                     type="button"
                     onClick={() =>
@@ -336,7 +337,7 @@ export function CirclesSafetyScreen({ onNavigate }: CirclesSafetyScreenProps) {
                 required
               />
               <div className="flex items-center justify-between font-mono text-xs text-[var(--muted)]">
-                <span>Auto-Expiry TTL:</span>
+                <span>Expires after:</span>
                 <div className="flex gap-1.5">
                   {[60, 120, 240].map((mins) => (
                     <button

@@ -14,6 +14,7 @@ import {
   Cpu,
   Gauge,
   HeartHandshake,
+  HelpCircle,
   Home,
   Map as MapIcon,
   Menu,
@@ -26,6 +27,7 @@ import type { LucideIcon } from 'lucide-react';
 import { AppScreenId } from '../content';
 import { useMeshStore } from '../store/useMeshStore';
 import { Sheet } from '../ui/Sheet';
+import { HowItWorksSheet } from '../ui/HowItWorksSheet';
 
 interface BottomPillNavProps {
   activeScreen: AppScreenId;
@@ -83,6 +85,7 @@ function NavItem({
 
 export function BottomPillNav({ activeScreen, onNavigate }: BottomPillNavProps) {
   const [moreOpen, setMoreOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
   // Unread = alerts received from other phones that this user has not opened or acknowledged.
   const unreadAlerts = useMeshStore(
     (s) => s.alerts.filter((a) => a.senderId !== s.identity.nodeId && !a.acknowledgedByMe && !s.seenAlertIds.includes(a.id)).length
@@ -132,6 +135,25 @@ export function BottomPillNav({ activeScreen, onNavigate }: BottomPillNavProps) 
 
       <Sheet open={moreOpen} title="More" onClose={() => setMoreOpen(false)}>
         <ul className="divide-y divide-[var(--line)]">
+          <li>
+            <button
+              type="button"
+              onClick={() => {
+                setMoreOpen(false);
+                setHelpOpen(true);
+              }}
+              className="flex min-h-[60px] w-full items-center gap-3 py-2 text-left"
+            >
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--surface-2)]">
+                <HelpCircle aria-hidden="true" className="h-5 w-5 text-[var(--fg)]" />
+              </span>
+              <span className="flex min-w-0 flex-1 flex-col">
+                <span className="text-base font-semibold text-[var(--fg)]">Help: How it works</span>
+                <span className="text-sm text-[var(--fg-secondary)]">Four short panels</span>
+              </span>
+              <ChevronRight aria-hidden="true" className="h-5 w-5 shrink-0 text-[var(--fg-secondary)]" />
+            </button>
+          </li>
           {MORE_ITEMS.filter((m) => !m.realOnly || appMode === 'real').map(({ id, label, hint, icon: Icon }) => (
             <li key={id}>
               <button
@@ -153,6 +175,7 @@ export function BottomPillNav({ activeScreen, onNavigate }: BottomPillNavProps) 
           ))}
         </ul>
       </Sheet>
+      <HowItWorksSheet open={helpOpen} onClose={() => setHelpOpen(false)} />
     </>
   );
 }

@@ -239,7 +239,7 @@ export default function App() {
           {activeScreen === 'quality' && <MeshQualityScreen />}
           {activeScreen === 'diagnostics' && <RadioDiagnosticsScreen />}
           {activeScreen === 'ai' && <AIAssistantScreen />}
-          {activeScreen === 'settings' && <SettingsScreen />}
+          {activeScreen === 'settings' && <SettingsScreen onNavigate={handleNavigate} />}
         </Suspense>
       </main>
 

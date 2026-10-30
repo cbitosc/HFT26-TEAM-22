@@ -40,7 +40,10 @@ export function SOSComposerScreen({ onNavigate }: SOSComposerScreenProps) {
   const phonesNearby = useMeshStore((s) => s.peers.filter((p) => p.isDirectNeighbor).length);
 
   const [selectedPictogramId, setSelectedPictogramId] = useState('medical_trauma');
-  const [pictoLang, setPictoLang] = useState<PictogramLanguage>('English');
+  const savedLanguage = useMeshStore((s) => s.language);
+  const setLanguage = useMeshStore((s) => s.setLanguage);
+  const pictoLang: PictogramLanguage = languages.includes(savedLanguage as PictogramLanguage) ? (savedLanguage as PictogramLanguage) : 'English';
+  const setPictoLang = (l: PictogramLanguage) => setLanguage(l);
   const [locPrecision, setLocPrecision] = useState<LocationPrecision>(locationOptIn);
   const [extraText, setExtraText] = useState('');
 

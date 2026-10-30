@@ -24,7 +24,7 @@ import {
   ShieldCheck,
   Trash2,
 } from 'lucide-react';
-import { POWER_MODES_CONTENT, sanketContent } from '../content';
+import { AppScreenId, POWER_MODES_CONTENT, sanketContent } from '../content';
 import { useMeshStore } from '../store/useMeshStore';
 import { LocationPrecision, PowerMode } from '../mesh/types';
 import { generateDeterministicQrMatrix } from '../crypto/qr';
@@ -34,10 +34,12 @@ import {
   issueResponderCertificate,
 } from '../crypto/responderCert';
 
-export function SettingsScreen() {
+export function SettingsScreen({ onNavigate }: { onNavigate: (screen: AppScreenId) => void }) {
   const appMode = useMeshStore((s) => s.appMode);
   const setAppMode = useMeshStore((s) => s.setAppMode);
   const theme = useMeshStore((s) => s.theme);
+  const language = useMeshStore((s) => s.language);
+  const setLanguage = useMeshStore((s) => s.setLanguage);
   const setTheme = useMeshStore((s) => s.setTheme);
   const visuals3D = useMeshStore((s) => s.visuals3D);
   const setVisuals3D = useMeshStore((s) => s.setVisuals3D);
@@ -137,16 +139,58 @@ export function SettingsScreen() {
         </h1>
       </div>
 
+      {/* Basics: mode, language, help, radio diagnostics */}
+      <div className="nova-card p-5">
+        <h2 className="mb-2 text-lg font-bold text-[var(--fg)]">Mode</h2>
+        <div role="group" aria-label="Mode" className="grid grid-cols-2 gap-1 rounded-full border border-[var(--line)] bg-[var(--surface-2)] p-1">
+          {([['real', 'Real radio'], ['demo', 'Demo']] as const).map(([id, label]) => (
+            <button
+              key={id}
+              type="button"
+              aria-pressed={appMode === id}
+              onClick={() => void setAppMode(id)}
+              className={`min-h-12 rounded-full px-2 text-base font-semibold ${appMode === id ? 'bg-[var(--surface)] text-[var(--fg)] shadow-[var(--shadow-1)]' : 'text-[var(--fg-secondary)]'}`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <p className="mt-2 text-sm text-[var(--fg-secondary)]">
+          {appMode === 'real'
+            ? 'Real radio: only phones that are actually near you appear.'
+            : 'Demo: simulated phones and messages, not real. Use it to try the app alone.'}
+        </p>
+
+        <label className="mt-4 flex flex-col gap-1 text-base font-semibold text-[var(--fg)]">
+          Language for SOS pictograms
+          <select
+            value={language}
+            onChange={(e) => setLanguage(e.target.value)}
+            className="min-h-12 rounded-[var(--radius-sm)] border border-[var(--line)] bg-[var(--surface)] px-3 text-base font-normal text-[var(--fg)]"
+          >
+            <option value="English">English</option>
+            <option value="Hindi">हिन्दी (Hindi)</option>
+            <option value="Telugu">తెలుగు (Telugu)</option>
+            <option value="Tamil">தமிழ் (Tamil)</option>
+          </select>
+        </label>
+
+        <div className="mt-4 grid grid-cols-2 gap-2">
+          {appMode === 'real' && (
+            <button type="button" onClick={() => onNavigate('diagnostics')} className="flex min-h-12 items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--surface)] px-3 text-base font-semibold text-[var(--fg)]">
+              Radio diagnostics
+            </button>
+          )}
+          <button type="button" onClick={() => onNavigate('onboarding')} className="flex min-h-12 items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--surface)] px-3 text-base font-semibold text-[var(--fg)]">
+            Permissions
+          </button>
+        </div>
+      </div>
+
       {/* Display & sound */}
       <div className="nova-card p-5">
         <h2 className="mb-2 text-lg font-bold text-[var(--fg)]">Display &amp; sound</h2>
         <div className="divide-y divide-[var(--line)]">
-          <Toggle
-            label="Demo mode (simulated phones)"
-            description="Shows made-up phones and messages so you can try the app alone. Turn off to use real nearby phones."
-            checked={appMode === 'demo'}
-            onChange={(on) => void setAppMode(on ? 'demo' : 'real')}
-          />
           <Toggle
             label="Dark mode"
             description="Saves battery on OLED screens."
@@ -182,7 +226,8 @@ export function SettingsScreen() {
           </span>
         </div>
 
-        {/* Battery Level Simulator Slider (to test <30% Balanced, <15% Saver, and ≤5% Last-Gasp SOS) */}
+        {/* Battery simulator (Demo only): tests <30% Balanced, <15% Saver and the ≤5% Last-Gasp SOS */}
+        {appMode === 'demo' && (
         <div className="mb-4 rounded-2xl border border-[var(--line)] bg-[var(--surface-2)] p-3.5">
           <div className="flex flex-wrap items-center justify-between gap-2 font-mono text-xs">
             <span>
@@ -211,6 +256,8 @@ export function SettingsScreen() {
             aria-label="Simulate Battery Percentage"
           />
         </div>
+
+        )}
 
         <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
           {POWER_MODES_CONTENT.map((pm) => {
@@ -302,6 +349,8 @@ export function SettingsScreen() {
         </p>
 
         <div className="mt-3 flex flex-wrap items-center gap-2">
+          {appMode === 'demo' && (
+            <>
           <button
             type="button"
             onClick={() => {
@@ -324,6 +373,8 @@ export function SettingsScreen() {
           >
             generate demo authority cert qr uri
           </button>
+            </>
+          )}
           {myResponderCert && (
             <button
               type="button"
@@ -361,6 +412,7 @@ export function SettingsScreen() {
       </div>
 
       {/* 3. GATEWAY "SETU" ONLINE BRIDGE (§9.6 — DEMO) & RESCUER LOCATE BLE RSSI (§9.8 — EXPERIMENTAL) */}
+      {appMode === 'demo' && (
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <div className="nova-card flex flex-col justify-between p-5">
           <div>
@@ -451,6 +503,7 @@ export function SettingsScreen() {
           </div>
         </div>
       </div>
+      )}
 
       {/* 4. Offline QR Scan-to-Trust & Key Fingerprint (§5) */}
       <div className="nova-card p-5">
@@ -524,7 +577,7 @@ export function SettingsScreen() {
                   className="flex min-h-[48px] cursor-pointer items-center gap-1.5 rounded-full bg-[var(--accent-blue)] px-4 font-mono text-xs font-bold text-white uppercase"
                 >
                   <ShieldCheck className="h-4 w-4" />
-                  <span>verify peer</span>
+                  <span>verify phone</span>
                 </button>
               </div>
               {qrScanFeedback && (

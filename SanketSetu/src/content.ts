@@ -557,7 +557,7 @@ export const POWER_MODES_CONTENT: readonly PowerModeContentConfig[] = [
     scanWindowLabel: 'continuous discovery (100% duty)',
     autoTriggerLabel: 'battery ≥ 30% or charger connected',
     orbPolicyLabel: '60fps webgl glass orb (adaptive dpr)',
-    relayPolicyLabel: 'relays all priorities (P0 SOS → P3 receipts)',
+    relayPolicyLabel: 'passes along everything',
   },
   {
     id: 'balanced',
@@ -565,7 +565,7 @@ export const POWER_MODES_CONTENT: readonly PowerModeContentConfig[] = [
     scanWindowLabel: 'duty-cycled: 10s scan / 20s sleep (33% duty)',
     autoTriggerLabel: 'auto-switches below 30% battery',
     orbPolicyLabel: 'throttled 30fps / reduced dpr webgl',
-    relayPolicyLabel: 'relays all messages with adaptive batching',
+    relayPolicyLabel: 'passes along everything, in batches',
   },
   {
     id: 'saver',
@@ -573,7 +573,7 @@ export const POWER_MODES_CONTENT: readonly PowerModeContentConfig[] = [
     scanWindowLabel: '5s scan / 45s sleep (10% duty) + wake on sos',
     autoTriggerLabel: 'auto-switches below 15% battery (last-gasp at ≤5%)',
     orbPolicyLabel: 'webgl paused — zero-gpu static css orb',
-    relayPolicyLabel: 'relays ONLY P0 SOS & P1 Emergency packets',
+    relayPolicyLabel: 'passes along only SOS and emergency messages',
   },
 ] as const;
 
