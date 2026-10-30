@@ -5,13 +5,14 @@ import { join, relative } from 'node:path';
 
 /**
  * Enforces the CLAUDE.md layering rule: src/mesh, src/crypto, src/transport, and src/db
- * ("core") must never import from screens, components, app, or store ("UI"). This is a plain
+ * ("core") must never import from screens, components, app, store, ui, or features ("UI"). This is a plain
  * grep over import specifiers, not a type-level check, but it's enough to catch an accidental
  * UI import creeping into core logic.
  */
 
-const CORE_DIRS = ['src/mesh', 'src/crypto', 'src/transport', 'src/db'];
-const FORBIDDEN_PREFIXES = ['../screens', '../components', '../app', '../store', '../../screens', '../../components', '../../app', '../../store'];
+const CORE_DIRS = ['src/core', 'src/mesh', 'src/crypto', 'src/transport', 'src/db'];
+const UI_DIRS = ['screens', 'components', 'app', 'store', 'ui', 'features'];
+const FORBIDDEN_PREFIXES = UI_DIRS.flatMap((d) => [`../${d}`, `../../${d}`]);
 const IMPORT_RE = /from\s+['"]([^'"]+)['"]/g;
 
 function listFilesRecursive(dir: string): string[] {

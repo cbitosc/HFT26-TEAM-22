@@ -10,6 +10,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { Toggle } from '../ui/Toggle';
+import { Badge } from '../ui/Badge';
 import { soundEngine } from '../lib/audio';
 import {
   Award,
@@ -404,12 +405,13 @@ export function SettingsScreen() {
                   Rescuer location (last 20 minutes)
                 </h2>
               </div>
-              <span className="rounded bg-[var(--accent-coral)]/15 px-2 py-0.5 font-mono text-[10px] font-bold text-[var(--sos-ink)] uppercase">
-                {sanketContent.experimentalBadge}
+              <span className="flex gap-1">
+                <Badge tone="sos">{sanketContent.experimentalBadge}</Badge>
+                <Badge tone="warn">SIMULATED</Badge>
               </span>
             </div>
-            <p className="mt-2 text-xs text-[var(--muted)]">
-              Uses smoothed BLE RSSI signal-strength bars to guide field rescuers within the final 20 meters of an active SOS beacon when GPS is obstructed indoors.
+            <p className="mt-2 text-sm text-[var(--fg-secondary)]">
+              Prototype of a last-20-metres signal-strength guide. The bars below use simulated signal values: Android&apos;s Nearby Connections does not report real signal strength for connected phones, so this is not a working finder on real radios yet. Do not rely on it to locate someone.
             </p>
           </div>
 
