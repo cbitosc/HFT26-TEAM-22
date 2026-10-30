@@ -1,0 +1,30 @@
+# Operating System files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# AI Studio & IDE cache
+.aistudio/
+.gemini/
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Dependencies & Build Outputs
+node_modules/
+dist/
+build/
+coverage/
+*.log
+
+# Environment variables & secrets
+.env
+.env*.local
+.env.production
+.env.development
+!.env.example
