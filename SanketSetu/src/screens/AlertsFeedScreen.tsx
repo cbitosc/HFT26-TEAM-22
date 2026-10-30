@@ -10,6 +10,10 @@
 
 import { useState } from 'react';
 import { ShowMoreButton, usePagedList } from '../ui/paging';
+import { EmptyState } from '../ui/EmptyState';
+import { Card } from '../ui/Card';
+import { Button } from '../ui/Button';
+import { Pill } from '../ui/Pill';
 import {
   AlertTriangle,
   Check,
@@ -133,14 +137,15 @@ export function AlertsFeedScreen({ onNavigate }: AlertsFeedScreenProps) {
             <span>ai triage</span>
           </button>
 
-          <button
+          <Button
             type="button"
+            tone="danger"
             onClick={() => onNavigate('sos')}
-            className="flex min-h-[44px] cursor-pointer items-center gap-1.5 rounded-full bg-[var(--accent-coral)] px-4 py-2 font-mono text-xs font-bold text-white uppercase"
+            className="rounded-full text-sm"
           >
             <AlertTriangle className="h-3.5 w-3.5" />
-            <span>new sos</span>
-          </button>
+            <span>New SOS</span>
+          </Button>
         </div>
       </div>
 
@@ -181,15 +186,19 @@ export function AlertsFeedScreen({ onNavigate }: AlertsFeedScreenProps) {
       </div>
 
       <div className="space-y-4">
+        {pagedClusters.visible.length === 0 && (
+          <EmptyState title="No alerts" >New emergency alerts will appear here when received.</EmptyState>
+        )}
         {pagedClusters.visible.map((cluster) => {
           const alert = cluster.primary;
           const isMine = alert.senderId === identity.nodeId;
           const mergedCount = cluster.members.length;
 
           return (
-            <article
+            <Card
+              as="article"
               key={cluster.clusterKey}
-              className="nova-card overflow-hidden border-2 border-[var(--accent-coral)]/45 p-5"
+              className="overflow-hidden border-2 border-[var(--accent-coral)]/45 p-5"
             >
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex flex-wrap items-center gap-2">
@@ -385,9 +394,7 @@ export function AlertsFeedScreen({ onNavigate }: AlertsFeedScreenProps) {
               {alert.offlineUrgencyHint && (
                 <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[var(--line)] bg-[var(--surface-2)] px-3.5 py-2 font-mono text-xs">
                   <div className="flex items-center gap-2">
-                    <span className="rounded bg-[var(--surface)] px-2 py-0.5 text-[10px] font-bold text-[var(--muted)] uppercase">
-                      {sanketContent.offlineHintBadge}
-                    </span>
+                    <Pill>{sanketContent.offlineHintBadge}</Pill>
                     <span className="font-bold text-[var(--fg)]">
                       {alert.offlineUrgencyHint.level}:
                     </span>
@@ -397,7 +404,7 @@ export function AlertsFeedScreen({ onNavigate }: AlertsFeedScreenProps) {
                   </div>
                 </div>
               )}
-            </article>
+            </Card>
           );
         })}
         <ShowMoreButton hiddenCount={pagedClusters.hiddenCount} onClick={pagedClusters.showMore} label="Show more alerts" />

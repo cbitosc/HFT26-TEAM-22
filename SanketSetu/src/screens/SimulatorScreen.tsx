@@ -547,54 +547,34 @@ export function SimulatorScreen() {
             <span className="font-mono text-xs font-bold text-[var(--fg)]">
               CONGESTION BENCHMARK · P0 SOS BYPASS VS P2/P3 NORMAL QUEUE
             </span>
-            {meshQuality.lastBenchmark && (
-              <span className="rounded-full bg-[var(--accent-green)] px-2.5 py-0.5 font-mono text-[10px] font-bold text-[var(--on-fill)]">
-                P0 SOS {meshQuality.lastBenchmark.sosBypassSpeedupFactor}x FASTER UNDER LOAD
-              </span>
-            )}
+            <span className="rounded-full bg-[var(--warn-tint)] px-2.5 py-1 text-xs font-bold text-[var(--warn-ink)]">SIMULATED</span>
           </div>
 
           {meshQuality.lastBenchmark ? (
-            <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="rounded-xl border border-[var(--accent-coral)]/40 bg-[var(--surface)] p-3">
-                <div className="font-mono text-[10px] font-bold text-[var(--sos-ink)] uppercase">
-                  P0 · SOS Beacon Latency (0–10ms Jitter)
-                </div>
+                <div className="text-sm font-bold text-[var(--sos-ink)]">SOS · simulated latency</div>
                 <div className="mt-1 font-grotesk text-2xl font-bold text-[var(--fg)]">
                   {meshQuality.lastBenchmark.sosLatencyMs} ms
                 </div>
-                <div className="mt-0.5 font-mono text-[10px] text-[var(--muted)]">
-                  Strict head-of-line priority dequeue
+                <div className="mt-1 text-sm text-[var(--fg-secondary)]">
+                  P50/P95 unavailable for this aggregate run.
                 </div>
               </div>
 
               <div className="rounded-xl border border-[var(--line)] bg-[var(--surface)] p-3">
-                <div className="font-mono text-[10px] font-bold text-[var(--verified-ink)] uppercase">
-                  P2 · Normal Mean Latency ({meshQuality.lastBenchmark.floodPacketsCount} Flood Pkts)
-                </div>
+                <div className="text-sm font-bold text-[var(--verified-ink)]">Normal · simulated aggregate</div>
                 <div className="mt-1 font-grotesk text-2xl font-bold text-[var(--fg)]">
-                  {meshQuality.lastBenchmark.normalMeanLatencyMs} ms
+                  {meshQuality.lastBenchmark.normalMeanLatencyMs} ms mean
                 </div>
-                <div className="mt-0.5 font-mono text-[10px] text-[var(--muted)]">
-                  Max: {meshQuality.lastBenchmark.normalMaxLatencyMs} ms (10–50ms jitter)
-                </div>
-              </div>
-
-              <div className="rounded-xl border border-[var(--line)] bg-[var(--surface)] p-3">
-                <div className="font-mono text-[10px] font-bold text-[var(--relay-ink)] uppercase">
-                  Priority Advantage Ratio
-                </div>
-                <div className="mt-1 font-grotesk text-2xl font-bold text-[var(--fg)]">
-                  {meshQuality.lastBenchmark.sosBypassSpeedupFactor}x
-                </div>
-                <div className="mt-0.5 font-mono text-[10px] text-[var(--muted)]">
-                  P0 never dropped; P3→P2 shed under congestion
+                <div className="mt-1 text-sm text-[var(--fg-secondary)]">
+                  {meshQuality.lastBenchmark.floodPacketsCount} background packets · reported max {meshQuality.lastBenchmark.normalMaxLatencyMs} ms. P50/P95 unavailable.
                 </div>
               </div>
             </div>
           ) : (
             <p className="mt-1.5 font-mono text-xs text-[var(--muted)]">
-              Click &ldquo;4. congestion benchmark (p0 sos vs p2/p3)&rdquo; above to flood 8 background P2 packets while sending a P0 SOS across the 4-node chain and compare latencies side by side.
+              Run the benchmark to compare SOS and normal traffic in this simulator. Values are simulated estimates, not radio measurements; p50 and p95 distributions are not available.
             </p>
           )}
         </div>

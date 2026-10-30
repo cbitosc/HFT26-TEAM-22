@@ -9,6 +9,7 @@
 
 import React, { useMemo, useState } from 'react';
 import { ShowMoreButton, usePagedList } from '../ui/paging';
+import { EmptyState } from '../ui/EmptyState';
 import {
   CheckCheck,
   Clock,
@@ -39,6 +40,7 @@ export function MessagesScreen() {
   const selectedPeerId =
     activeConversationId ?? peers[peers.length - 1]?.nodeId ?? 'BROADCAST';
   const selectedPeer = peers.find((p) => p.nodeId === selectedPeerId);
+  const pagedPeers = usePagedList(peers, 12);
 
   const conversationMessages = useMemo(
     () => messages.filter((m) => m.conversationId === selectedPeerId),
@@ -66,7 +68,7 @@ export function MessagesScreen() {
           <span className="inline-flex items-center gap-1 rounded-full bg-[var(--accent-blue)] px-2.5 py-0.5 font-mono text-[10px] font-bold text-white">
             <CheckCheck className="h-3 w-3" />
             <span>
-              DELIVERED ({msg.relayedHops} hop{msg.relayedHops === 1 ? '' : 's'})
+              Delivered · {msg.relayedHops} hop{msg.relayedHops === 1 ? '' : 's'}
             </span>
           </span>
         );
@@ -74,20 +76,20 @@ export function MessagesScreen() {
         return (
           <span className="inline-flex items-center gap-1 rounded-full bg-[var(--accent-lilac)] px-2.5 py-0.5 font-mono text-[10px] font-bold text-[var(--on-fill)]">
             <Radio className="h-3 w-3" />
-            <span>RELAYED ({msg.relayedHops} hops)</span>
+            <span>Relayed · {msg.relayedHops} hops</span>
           </span>
         );
       case 'SENT':
         return (
           <span className="inline-flex items-center gap-1 rounded-full bg-[var(--accent-green)] px-2.5 py-0.5 font-mono text-[10px] font-bold text-[var(--on-fill)]">
-            <span>SENT (1st hop)</span>
+            <span>Sent</span>
           </span>
         );
       default:
         return (
           <span className="inline-flex items-center gap-1 rounded-full border border-[var(--line)] bg-[var(--surface)] px-2.5 py-0.5 font-mono text-[10px] font-bold text-[var(--muted)]">
             <Clock className="h-3 w-3" />
-            <span>PENDING (outbox queued)</span>
+            <span>Pending · queued</span>
           </span>
         );
     }
@@ -117,7 +119,10 @@ export function MessagesScreen() {
             mesh peers ({peers.length})
           </div>
           <div className="divide-y divide-[var(--line)]">
-            {peers.map((peer) => {
+            {peers.length === 0 ? (
+              <EmptyState title="No nearby peers" >Start the simulator or connect to a nearby phone to begin a conversation.</EmptyState>
+            ) : <>
+            {pagedPeers.visible.map((peer) => {
               const isSelected = peer.nodeId === selectedPeerId;
               const threadMsgs = messages.filter(
                 (m) => m.conversationId === peer.nodeId
@@ -176,6 +181,8 @@ export function MessagesScreen() {
                 </button>
               );
             })}
+            <ShowMoreButton hiddenCount={pagedPeers.hiddenCount} onClick={pagedPeers.showMore} label="Show more peers" />
+            </>}
           </div>
         </div>
 
@@ -207,12 +214,9 @@ export function MessagesScreen() {
           <div className="flex-1 space-y-3 overflow-y-auto p-4">
             {conversationMessages.length === 0 ? (
               <div className="flex h-56 flex-col items-center justify-center text-center">
-                <p className="font-grotesk text-base font-semibold text-[var(--fg)] lowercase">
-                  no encrypted packets in this thread yet
-                </p>
-                <p className="mt-1 max-w-sm text-xs text-[var(--muted)]">
-                  Send a message below. Even if {selectedPeer?.displayName} is 3 hops away or temporarily disconnected, Sanket will route or store-and-forward it automatically.
-                </p>
+                <EmptyState title="No messages yet">
+                  {selectedPeer ? `Send a message to ${selectedPeer.displayName}. It will wait in the outbox if they are temporarily disconnected.` : 'Choose a peer to start a conversation.'}
+                </EmptyState>
               </div>
             ) : (
               <>
@@ -240,7 +244,7 @@ export function MessagesScreen() {
                         {renderDeliveryBadge(msg)}
                       </div>
 
-                      <p className="text-sm leading-relaxed text-[var(--fg)]">
+                      <p className="text-base leading-relaxed text-[var(--fg)]">
                         {msg.text}
                       </p>
 
@@ -251,10 +255,10 @@ export function MessagesScreen() {
                         <button
                           type="button"
                           onClick={() => setInspectedMsg(msg)}
-                          className="flex cursor-pointer items-center gap-1 rounded-full border border-[var(--line)] bg-[var(--surface)] px-2.5 py-1 font-mono text-[10px] font-bold text-[var(--fg)] transition-colors hover:border-[var(--fg)]"
+                          className="flex min-h-12 cursor-pointer items-center gap-1 rounded-xl border border-[var(--line)] bg-[var(--surface)] px-3 py-2 text-sm font-semibold text-[var(--fg)] transition-colors hover:border-[var(--fg)]"
                         >
                           <Eye className="h-3 w-3 text-[var(--verified-ink)]" />
-                          <span>inspect route & crypto</span>
+                          <span>Inspect</span>
                         </button>
                       </div>
                     </div>
@@ -269,7 +273,7 @@ export function MessagesScreen() {
           {selectedPeerId !== 'BROADCAST' && (
             <form
               onSubmit={handleSend}
-              className="border-t border-[var(--line)] bg-[var(--surface-2)] p-3"
+              className="sticky bottom-[calc(var(--nav-h)+var(--safe-bottom))] z-20 border-t border-[var(--line)] bg-[var(--surface)] p-3 shadow-[var(--shadow-2)]"
             >
               {sendError && (
                 <div className="mb-2 rounded-xl bg-[var(--accent-coral)]/15 px-3 py-1.5 font-mono text-xs text-[var(--sos-ink)]">
@@ -305,7 +309,7 @@ export function MessagesScreen() {
                   className="flex min-h-[48px] cursor-pointer items-center gap-1.5 rounded-full bg-[var(--accent-green)] px-5 py-2.5 font-grotesk text-sm font-bold text-[var(--on-fill)] transition-transform active:scale-95"
                 >
                   <Send className="h-4 w-4" />
-                  <span>send</span>
+                  <span>Send</span>
                 </button>
               </div>
             </form>

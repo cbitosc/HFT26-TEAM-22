@@ -694,7 +694,7 @@ export const sanketContent = {
   demoGatewayBadge: 'DEMO',
   experimentalBadge: 'EXPERIMENTAL',
   aiDisclaimer: 'AI suggestion, use your judgment.',
-  offlineHintBadge: 'basic offline hint (rule-based)',
+  offlineHintBadge: 'Rule-based hint',
   privacyNotice:
     'Privacy Notice: When using the optional online AI assistant, only the selected message text is sent to Featherless.ai. Private keys and GPS coordinates never leave your device unless you explicitly include them.',
   threatModelLimits: [

@@ -10,6 +10,7 @@ import { Skeleton } from './ui/Skeleton';
 import { TopBar } from './app/TopBar';
 import { BottomPillNav } from './app/BottomPillNav';
 import { useMeshStore } from './store/useMeshStore';
+import { Button } from './ui/Button';
 
 // Lazy-loaded per route: HomeScreen alone pulls in the Three.js/R3F Orb (~500KB+ gzipped), so
 // keeping every screen out of the main entry chunk means that cost is only paid for the routes
@@ -89,6 +90,8 @@ export default function App() {
   const isSaverMode = useMeshStore((s) => s.metrics.powerMode === 'saver');
   const darkSuggestionDismissed = useMeshStore((s) => s.darkSuggestionDismissed);
   const dismissDarkSuggestion = useMeshStore((s) => s.dismissDarkSuggestion);
+  const permissionState = useMeshStore((s) => s.permissionState);
+  const openAppSettings = useMeshStore((s) => s.openAppSettings);
   const showDarkSuggestion = isSaverMode && theme === 'light' && !darkSuggestionDismissed;
 
   // Initialize mesh engine, virtual 4-node chain, and Dexie store once on mount
@@ -123,6 +126,13 @@ export default function App() {
   return (
     <div className="relative min-h-screen w-full overflow-x-hidden bg-[var(--bg)] text-[var(--fg)]">
       <TopBar onNavigate={handleNavigate} />
+
+      {permissionState && !permissionState.allGranted && (
+        <div role="alert" className="mx-auto flex w-full flex-wrap items-center justify-between gap-2 border-b border-[var(--warn-ink)]/30 bg-[var(--warn-tint)] px-4 py-2.5">
+          <p className="text-sm font-semibold text-[var(--warn-ink)]">Nearby permissions are off. The app can still show the simulator, but real radio connections are unavailable.</p>
+          <Button type="button" tone="neutral" onClick={() => void openAppSettings()} className="min-h-12">Open settings</Button>
+        </div>
+      )}
 
       {showDarkSuggestion && (
         <div
