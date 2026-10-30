@@ -882,7 +882,9 @@ export const useMeshStore = create<MeshStoreState>((set, get) => ({
     const savedTheme = await loadKvJson<ThemeMode>('ui_theme');
     const savedVisuals3D = await loadKvJson<boolean>('ui_visuals_3d');
     const savedDarkDismissed = await loadKvJson<boolean>('ui_dark_suggestion_dismissed');
-    const theme: ThemeMode = savedTheme === 'dark' ? 'dark' : 'light';
+    // No kv entry yet (first launch, or storage was cleared): keep the pre-paint choice.
+    const theme: ThemeMode =
+      savedTheme === 'dark' || savedTheme === 'light' ? savedTheme : get().theme;
     applyTheme(theme);
     set({
       theme,

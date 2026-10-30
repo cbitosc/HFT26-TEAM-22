@@ -14,7 +14,7 @@ export function Toggle({ label, description, checked, onChange }: ToggleProps) {
       role="switch"
       aria-checked={checked}
       onClick={() => onChange(!checked)}
-      className="flex min-h-[56px] w-full items-center justify-between gap-4 rounded-[var(--radius-sm)] px-1 py-2 text-left"
+      className="flex min-h-[56px] w-full items-center justify-between gap-4 px-1 py-2 text-left"
     >
       <span className="flex flex-col">
         <span className="text-base font-semibold text-[var(--fg)]">{label}</span>

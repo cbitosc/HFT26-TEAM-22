@@ -3,11 +3,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { Suspense, lazy, useEffect, useState } from 'react';
+import { Suspense, lazy, useEffect, useState } from 'react';
 import { AppScreenId, MOBILE_TABS } from './content';
 import { useReducedMotion } from './hooks/useReducedMotion';
-import { soundEngine } from './lib/audio';
-import { ThemeMode } from './ui/theme';
 import { Skeleton } from './ui/Skeleton';
 import { TopBar } from './app/TopBar';
 import { BottomPillNav } from './app/BottomPillNav';
@@ -92,16 +90,13 @@ export default function App() {
   const darkSuggestionDismissed = useMeshStore((s) => s.darkSuggestionDismissed);
   const dismissDarkSuggestion = useMeshStore((s) => s.dismissDarkSuggestion);
   const showDarkSuggestion = isSaverMode && theme === 'light' && !darkSuggestionDismissed;
-  const [isMuted, setIsMuted] = useState(() => soundEngine.isMuted());
 
   // Initialize mesh engine, virtual 4-node chain, and Dexie store once on mount
   useEffect(() => {
     void initMeshApp();
   }, [initMeshApp]);
 
-  useEffect(() => soundEngine.subscribe(() => setIsMuted(soundEngine.isMuted())), []);
-
-  // Sync Hash Routing (#/home, #/messages, #/sos, #/alerts, #/circles, #/map, #/simulator, #/ai, #/settings)
+  // Hash routing (#/, #/messages, #/sos, #/alerts, #/circles, #/map, #/simulator, #/ai, #/settings)
   useEffect(() => {
     const onHashChange = () => {
       const target = resolveScreenFromHash(window.location.hash);
@@ -121,25 +116,13 @@ export default function App() {
       if (window.location.hash !== nextHash) {
         window.history.replaceState(null, '', nextHash);
       }
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      window.scrollTo({ top: 0 });
     }
   };
 
-  // Instant theme switch — no View Transition / clip-path animation.
-  const handleToggleTheme = (nextTheme: ThemeMode) => setTheme(nextTheme);
-
   return (
-    <div className="relative min-h-screen w-full bg-[var(--bg)] text-[var(--fg)]">
-
-      {/* Top Status & Theme Bar */}
-      <TopBar
-        activeScreen={activeScreen}
-        onNavigate={handleNavigate}
-        theme={theme}
-        onToggleTheme={handleToggleTheme}
-        isMuted={isMuted}
-        onToggleMute={() => soundEngine.toggleMute()}
-      />
+    <div className="relative min-h-screen w-full overflow-x-hidden bg-[var(--bg)] text-[var(--fg)]">
+      <TopBar onNavigate={handleNavigate} />
 
       {showDarkSuggestion && (
         <div
@@ -153,14 +136,14 @@ export default function App() {
             <button
               type="button"
               onClick={() => setTheme('dark')}
-              className="min-h-[44px] rounded-full bg-[var(--fg)] px-4 text-sm font-semibold text-[var(--bg)]"
+              className="min-h-[48px] rounded-full bg-[var(--fg)] px-4 text-sm font-semibold text-[var(--bg)]"
             >
               Use dark mode
             </button>
             <button
               type="button"
               onClick={dismissDarkSuggestion}
-              className="min-h-[44px] rounded-full border border-[var(--line)] bg-[var(--surface)] px-4 text-sm font-semibold text-[var(--fg)]"
+              className="min-h-[48px] rounded-full border border-[var(--line)] bg-[var(--surface)] px-4 text-sm font-semibold text-[var(--fg)]"
             >
               Not now
             </button>
@@ -168,8 +151,11 @@ export default function App() {
         </div>
       )}
 
-      {/* Active Screen Content */}
-      <main className="relative z-10 w-full">
+      {/* Bottom padding = nav height + safe-area inset + breathing room, so the fixed nav never covers content. */}
+      <main
+        className="relative w-full"
+        style={{ paddingBottom: 'calc(var(--nav-h) + var(--safe-bottom) + 24px)' }}
+      >
         <Suspense fallback={<ScreenLoadingFallback />}>
           {activeScreen === 'home' && (
             <HomeScreen
@@ -200,11 +186,7 @@ export default function App() {
         </Suspense>
       </main>
 
-      {/* Thumb-Reachable Floating Bottom Tab Pill Navigation */}
-      <BottomPillNav
-        activeScreen={activeScreen}
-        onNavigate={handleNavigate}
-      />
+      <BottomPillNav activeScreen={activeScreen} onNavigate={handleNavigate} />
     </div>
   );
 }
