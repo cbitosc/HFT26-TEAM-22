@@ -1,29 +1,64 @@
 /**
- * Messages & E2E Encrypted Thread Screen (src/screens/MessagesScreen.tsx)
- * Per §8.4:
- * - Conversation list with priority badges, hop distance, and TOFU verification status.
- * - Thread view with per-message status:
- *   PENDING -> SENT -> RELAYED (n hops) -> DELIVERED
- * - Click / long-press any message -> opens the 3-tab MessageInspectorModal (Route, Packet, Crypto).
+ * Chat (src/screens/MessagesScreen.tsx): two places to talk.
+ * - "Everyone nearby": a shared channel that reaches every phone in range and is passed along.
+ * - "Nearby people": phones that have actually introduced themselves (signed HELLO); tap one for a
+ *   private end-to-end encrypted thread.
+ * Messages sent while no phone is connected wait in the outbox ("Waiting for a nearby phone") and go
+ * out by themselves when a phone connects. Status text is plain language (src/lib/deliveryLabel.ts).
+ * The composer is sticky above the bottom nav so the keyboard never hides it.
  */
 
-import React, { useMemo, useState } from 'react';
-import { ShowMoreButton, usePagedList } from '../ui/paging';
-import { DeliveryBridge } from '../ui/BridgeStatus';
-import { EmptyState } from '../ui/EmptyState';
-import {
-  CheckCheck,
-  Clock,
-  Eye,
-  Lock,
-  Radio,
-  Send,
-  ShieldAlert,
-  ShieldCheck,
-} from 'lucide-react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { ArrowLeft, Check, Clock, Info, Search, Send, ShieldAlert, ShieldCheck } from 'lucide-react';
 import { useMeshStore } from '../store/useMeshStore';
-import { PriorityLevel, StoredMessage } from '../mesh/types';
+import { StoredMessage } from '../mesh/types';
 import { MessageInspectorModal } from '../components/MessageInspectorModal';
+import { HowItWorksSheet } from '../ui/HowItWorksSheet';
+import { NearbyPeopleList } from '../ui/NearbyPeopleList';
+import { deliveryLabel } from '../lib/deliveryLabel';
+import { timeAgo } from '../lib/timeAgo';
+import { Button } from '../ui/Button';
+import { Card } from '../ui/Card';
+import { ShowMoreButton, usePagedList } from '../ui/paging';
+
+type Tab = 'everyone' | 'people';
+
+function StatusLine({ msg }: { msg: StoredMessage }) {
+  const waiting = msg.deliveryState === 'PENDING';
+  const Icon = waiting ? Clock : Check;
+  return (
+    <span className="flex items-center gap-1 text-sm text-[var(--fg-secondary)]">
+      <Icon aria-hidden="true" className="h-4 w-4 shrink-0" />
+      {deliveryLabel(msg.deliveryState, msg.relayedHops)}
+    </span>
+  );
+}
+
+function Bubble({ msg, mine, showSender, onInspect }: { msg: StoredMessage; mine: boolean; showSender: boolean; onInspect: () => void }) {
+  return (
+    <div className={`flex flex-col ${mine ? 'items-end' : 'items-start'}`}>
+      <div
+        className={`max-w-[85%] rounded-2xl border px-3.5 py-2.5 ${
+          mine ? 'border-[var(--line)] bg-[var(--surface-2)]' : 'border-[var(--line)] bg-[var(--surface)]'
+        }`}
+      >
+        {showSender && !mine && <p className="text-sm font-bold text-[var(--fg)]">{msg.senderName}</p>}
+        <p className="text-base break-words text-[var(--fg)]">{msg.text}</p>
+        <div className="mt-1 flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+          {mine ? <StatusLine msg={msg} /> : <span className="text-sm text-[var(--fg-secondary)]">{timeAgo(msg.timestamp)}</span>}
+          <button
+            type="button"
+            onClick={onInspect}
+            aria-label="Message details"
+            className="flex min-h-12 min-w-12 items-center justify-center text-[var(--fg-secondary)]"
+          >
+            <Info aria-hidden="true" className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export function MessagesScreen() {
   const identity = useMeshStore((s) => s.identity);
@@ -32,269 +67,182 @@ export function MessagesScreen() {
   const activeConversationId = useMeshStore((s) => s.activeConversationId);
   const setActiveConversation = useMeshStore((s) => s.setActiveConversation);
   const sendDirectMessage = useMeshStore((s) => s.sendDirectMessage);
+  const sendBroadcastMessage = useMeshStore((s) => s.sendBroadcastMessage);
+  const phonesNearby = useMeshStore((s) => s.peers.filter((p) => p.isDirectNeighbor).length);
 
-  const [draftText, setDraftText] = useState('');
-  const [priority, setPriority] = useState<PriorityLevel>(2);
-  const [inspectedMsg, setInspectedMsg] = useState<StoredMessage | null>(null);
+  const privateId = activeConversationId && activeConversationId !== 'BROADCAST' ? activeConversationId : null;
+  const [tab, setTab] = useState<Tab>(privateId ? 'people' : 'everyone');
+  const [draft, setDraft] = useState('');
+  const [inspected, setInspected] = useState<StoredMessage | null>(null);
   const [sendError, setSendError] = useState<string | null>(null);
+  const [helpOpen, setHelpOpen] = useState(false);
+  const endRef = useRef<HTMLDivElement>(null);
 
-  const selectedPeerId =
-    activeConversationId ?? peers[peers.length - 1]?.nodeId ?? 'BROADCAST';
-  const selectedPeer = peers.find((p) => p.nodeId === selectedPeerId);
-  const pagedPeers = usePagedList(peers, 12);
+  const inPrivateThread = tab === 'people' && privateId !== null;
+  const threadId = inPrivateThread ? privateId : 'BROADCAST';
+  const person = peers.find((p) => p.nodeId === privateId);
+  const personName = person?.displayName ?? messages.find((m) => m.conversationId === privateId && m.direction === 'inbound')?.senderName ?? 'this phone';
 
-  const conversationMessages = useMemo(
-    () => messages.filter((m) => m.conversationId === selectedPeerId),
-    [messages, selectedPeerId]
-  );
-  const pagedMessages = usePagedList(conversationMessages, 30, true);
+  const thread = useMemo(() => messages.filter((m) => m.conversationId === threadId), [messages, threadId]);
+  const paged = usePagedList(thread, 30, true);
+  const showComposer = tab === 'everyone' || inPrivateThread;
 
-  const handleSend = async (e: React.FormEvent) => {
+  useEffect(() => {
+    endRef.current?.scrollIntoView({ block: 'end' });
+  }, [thread.length, threadId]);
+
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!draftText.trim() || selectedPeerId === 'BROADCAST') return;
+    const text = draft.trim();
+    if (!text) return;
     setSendError(null);
+    setDraft('');
     try {
-      const textToSend = draftText.trim();
-      setDraftText('');
-      await sendDirectMessage(selectedPeerId, textToSend, priority);
+      if (inPrivateThread && privateId) await sendDirectMessage(privateId, text, 2);
+      else await sendBroadcastMessage(text, 2);
     } catch (err) {
+      setDraft(text);
       setSendError(err instanceof Error ? err.message : String(err));
     }
   };
 
-  const renderDeliveryBadge = (msg: StoredMessage) => (
-    <div className="w-full max-w-[220px]">
-      <DeliveryBridge state={msg.deliveryState} hops={msg.relayedHops} compact />
-    </div>
-  );
+  const switchTab = (next: Tab) => {
+    setTab(next);
+    if (next === 'everyone') setActiveConversation('BROADCAST');
+    else setActiveConversation(null);
+  };
 
   return (
-    <section className="mx-auto w-full max-w-5xl px-4 pt-2 pb-28 sm:px-6">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <span className="type-mono-label text-[var(--muted)]">
-            02 / 07 — end-to-end encrypted mesh threads
-          </span>
-          <h1 className="type-h2 mt-0.5 font-grotesk text-[var(--fg)]">
-            Messages
-          </h1>
-        </div>
-        <div className="flex items-center gap-1.5 rounded-full border border-[var(--line)] bg-[var(--surface)] px-3 py-1 font-mono text-xs text-[var(--muted)]">
-          <Lock className="h-3.5 w-3.5 text-[var(--verified-ink)]" />
-          <span>relays read headers only, never plaintext</span>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
-        {/* Left Column: Peer Conversation List */}
-        <div className="nova-card flex flex-col overflow-hidden lg:col-span-4">
-          <div className="border-b border-[var(--line)] px-4 py-3 font-mono text-xs font-bold text-[var(--muted)] uppercase">
-            mesh peers ({peers.length})
-          </div>
-          <div className="divide-y divide-[var(--line)]">
-            {peers.length === 0 ? (
-              <EmptyState title="No nearby peers" >Start the simulator or connect to a nearby phone to begin a conversation.</EmptyState>
-            ) : <>
-            {pagedPeers.visible.map((peer) => {
-              const isSelected = peer.nodeId === selectedPeerId;
-              const threadMsgs = messages.filter(
-                (m) => m.conversationId === peer.nodeId
-              );
-              const lastMsg = threadMsgs[threadMsgs.length - 1];
-
-              return (
-                <button
-                  key={peer.nodeId}
-                  type="button"
-                  onClick={() => setActiveConversation(peer.nodeId)}
-                  className={`flex min-h-[68px] w-full cursor-pointer flex-col justify-between p-3.5 text-left transition-colors ${
-                    isSelected
-                      ? 'bg-[var(--surface-2)]'
-                      : 'hover:bg-[var(--surface-2)]/50'
-                  }`}
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-1.5">
-                      <span className="font-grotesk text-sm font-bold text-[var(--fg)]">
-                        {peer.displayName}
-                      </span>
-                      {peer.trustStatus === 'verified' ? (
-                        <ShieldCheck
-                          className="h-4 w-4 text-[var(--verified-ink)]"
-                          aria-label="Verified Contact"
-                        />
-                      ) : peer.trustStatus === 'key_changed' ? (
-                        <ShieldAlert
-                          className="h-4 w-4 text-[var(--sos-ink)]"
-                          aria-label="WARNING: Public key changed (TOFU alert)"
-                        />
-                      ) : null}
-                    </div>
-                    <span
-                      className={`rounded-full px-2 py-0.5 font-mono text-[10px] font-bold ${
-                        peer.isDirectNeighbor
-                          ? 'bg-[var(--accent-green)] text-[var(--on-fill)]'
-                          : 'bg-[var(--accent-lilac)] text-[var(--on-fill)]'
-                      }`}
-                    >
-                      {peer.hopsAway} {peer.hopsAway === 1 ? 'hop' : 'hops'}
-                    </span>
-                  </div>
-
-                  <div className="mt-1 flex items-center justify-between gap-2">
-                    <p className="truncate text-xs text-[var(--muted)]">
-                      {lastMsg
-                        ? lastMsg.text
-                        : `Tap to message across ${peer.hopsAway} hop(s)`}
-                    </p>
-                    <span className="font-mono text-[10px] text-[var(--muted)]">
-                      #{peer.nodeId.slice(0, 6)}
-                    </span>
-                  </div>
-                </button>
-              );
-            })}
-            <ShowMoreButton hiddenCount={pagedPeers.hiddenCount} onClick={pagedPeers.showMore} label="Show more peers" />
-            </>}
+    <section className="mx-auto flex w-full max-w-lg flex-col px-4 pt-3">
+      {inPrivateThread ? (
+        <div className="mb-3 flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setActiveConversation(null)}
+            aria-label="Back to nearby people"
+            className="flex h-12 w-12 items-center justify-center rounded-full text-[var(--fg)]"
+          >
+            <ArrowLeft aria-hidden="true" className="h-6 w-6" />
+          </button>
+          <div className="min-w-0">
+            <h1 className="flex items-center gap-1.5 truncate text-xl font-bold text-[var(--fg)]">
+              {personName}
+              {person?.trustStatus === 'verified' && <ShieldCheck aria-label="Verified" className="h-5 w-5 text-[var(--verified-ink)]" />}
+              {person?.trustStatus === 'key_changed' && <ShieldAlert aria-label="Key changed" className="h-5 w-5 text-[var(--sos-ink)]" />}
+            </h1>
+            <p className="text-sm text-[var(--fg-secondary)]">Private. Only {personName} can read this.</p>
           </div>
         </div>
-
-        {/* Right Column: Active Thread + Composer */}
-        <div className="nova-card flex min-h-[460px] flex-col justify-between overflow-hidden lg:col-span-8">
-          {/* Thread Header */}
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--line)] bg-[var(--surface-2)] px-4 py-3">
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="font-grotesk text-base font-bold text-[var(--fg)]">
-                  {selectedPeer
-                    ? selectedPeer.displayName
-                    : 'Broadcast Channel'}
-                </h2>
-                {selectedPeer && (
-                  <span className="rounded-full border border-[var(--line)] bg-[var(--surface)] px-2.5 py-0.5 font-mono text-[10px] font-bold text-[var(--fg)]">
-                    {selectedPeer.trustStatus.toUpperCase()} ·{' '}
-                    {selectedPeer.hopsAway} HOP(S)
-                  </span>
-                )}
-              </div>
-              <div className="font-mono text-[11px] text-[var(--muted)]">
-                Node Fingerprint: #{selectedPeerId} · E2E X25519-XSalsa20-Poly1305
-              </div>
-            </div>
+      ) : (
+        <>
+          <h1 className="mb-2 text-2xl font-bold text-[var(--fg)]">Chat</h1>
+          <div role="tablist" aria-label="Chat" className="mb-3 grid grid-cols-2 gap-1 rounded-full border border-[var(--line)] bg-[var(--surface-2)] p-1">
+            {([
+              ['everyone', 'Everyone nearby'],
+              ['people', `Nearby people${peers.length ? ` (${peers.length})` : ''}`],
+            ] as const).map(([id, label]) => (
+              <button
+                key={id}
+                type="button"
+                role="tab"
+                aria-selected={tab === id}
+                onClick={() => switchTab(id)}
+                className={`min-h-12 rounded-full px-2 text-base font-semibold ${
+                  tab === id ? 'bg-[var(--surface)] text-[var(--fg)] shadow-[var(--shadow-1)]' : 'text-[var(--fg-secondary)]'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
           </div>
+        </>
+      )}
 
-          {/* Messages List */}
-          <div className="flex-1 space-y-3 overflow-y-auto p-4">
-            {conversationMessages.length === 0 ? (
-              <div className="flex h-56 flex-col items-center justify-center text-center">
-                <EmptyState title="No messages yet">
-                  {selectedPeer ? `Send a message to ${selectedPeer.displayName}. It will wait in the outbox if they are temporarily disconnected.` : 'Choose a peer to start a conversation.'}
-                </EmptyState>
-              </div>
+      {tab === 'people' && !inPrivateThread && (
+        peers.length === 0 ? (
+          <Card className="flex flex-col items-center gap-3 px-5 py-8 text-center">
+            <Search aria-hidden="true" className="h-8 w-8 text-[var(--fg-secondary)]" />
+            <p className="text-lg font-bold text-[var(--fg)]">No phones nearby yet.</p>
+            <p className="text-base text-[var(--fg-secondary)]">
+              Ask a friend to open Sanket Setu and stay within about 30 to 100 m.
+            </p>
+            <Button type="button" onClick={() => setHelpOpen(true)}>How it works</Button>
+          </Card>
+        ) : (
+          <NearbyPeopleList onSelect={(id) => setActiveConversation(id)} />
+        )
+      )}
+
+      {showComposer && (
+        <>
+          {tab === 'everyone' && (
+            <p className="mb-2 text-sm text-[var(--fg-secondary)]">
+              {phonesNearby > 0
+                ? `Everyone within range sees this. ${phonesNearby} phone${phonesNearby === 1 ? '' : 's'} connected.`
+                : 'No phones nearby yet. Messages wait here and send when a phone connects.'}
+            </p>
+          )}
+          <div className="flex min-h-[40vh] flex-col gap-3 pb-3">
+            {thread.length === 0 ? (
+              <Card className="flex flex-col items-center gap-3 px-5 py-8 text-center">
+                <p className="text-lg font-bold text-[var(--fg)]">
+                  {tab === 'everyone' ? 'Nothing here yet.' : `Say hello to ${personName}.`}
+                </p>
+                <p className="text-base text-[var(--fg-secondary)]">
+                  {tab === 'everyone' && phonesNearby === 0
+                    ? 'Ask a friend to open Sanket Setu and stay within about 30 to 100 m.'
+                    : 'Type below. You will see when it is sent.'}
+                </p>
+                {tab === 'everyone' && <Button type="button" onClick={() => setHelpOpen(true)}>How it works</Button>}
+              </Card>
             ) : (
               <>
-              <ShowMoreButton hiddenCount={pagedMessages.hiddenCount} onClick={pagedMessages.showMore} label="Show earlier messages" />
-              {pagedMessages.visible.map((msg) => {
-                const isOutbound = msg.senderId === identity.nodeId;
-                return (
-                  <div
-                    key={msg.id}
-                    className={`flex flex-col ${
-                      isOutbound ? 'items-end' : 'items-start'
-                    }`}
-                  >
-                    <div
-                      className={`max-w-lg rounded-2xl border p-3.5 ${
-                        isOutbound
-                          ? 'border-[var(--fg)]/20 bg-[var(--surface-2)]'
-                          : 'border-[var(--line)] bg-[var(--surface)]'
-                      }`}
-                    >
-                      <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
-                        <span className="font-mono text-[10px] font-bold text-[var(--muted)] uppercase">
-                          {msg.senderName} · P{msg.priority}
-                        </span>
-                        {renderDeliveryBadge(msg)}
-                      </div>
-
-                      <p className="text-base leading-relaxed text-[var(--fg)]">
-                        {msg.text}
-                      </p>
-
-                      <div className="mt-2.5 flex flex-wrap items-center justify-between gap-3 border-t border-[var(--line)] pt-2">
-                        <span className="font-mono text-[10px] text-[var(--muted)]">
-                          Route: {msg.route.join(' → ')}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => setInspectedMsg(msg)}
-                          className="flex min-h-12 cursor-pointer items-center gap-1 rounded-xl border border-[var(--line)] bg-[var(--surface)] px-3 py-2 text-sm font-semibold text-[var(--fg)] transition-colors hover:border-[var(--fg)]"
-                        >
-                          <Eye className="h-3 w-3 text-[var(--verified-ink)]" />
-                          <span>Inspect</span>
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
+                <ShowMoreButton hiddenCount={paged.hiddenCount} onClick={paged.showMore} label="Show earlier messages" />
+                {paged.visible.map((m) => (
+                  <Bubble
+                    key={m.id}
+                    msg={m}
+                    mine={m.senderId === identity.nodeId}
+                    showSender={tab === 'everyone'}
+                    onInspect={() => setInspected(m)}
+                  />
+                ))}
               </>
             )}
+            <div ref={endRef} />
           </div>
 
-          {/* Message Composer */}
-          {selectedPeerId !== 'BROADCAST' && (
-            <form
-              onSubmit={handleSend}
-              className="sticky bottom-[calc(var(--nav-h)+var(--safe-bottom))] z-20 border-t border-[var(--line)] bg-[var(--surface)] p-3 shadow-[var(--shadow-2)]"
-            >
-              {sendError && (
-                <div className="mb-2 rounded-xl bg-[var(--accent-coral)]/15 px-3 py-1.5 font-mono text-xs text-[var(--sos-ink)]">
-                  {sendError}
-                </div>
-              )}
-              <div className="flex flex-wrap items-center gap-2">
-                <select
-                  aria-label="Message Priority"
-                  value={priority}
-                  onChange={(e) =>
-                    setPriority(Number(e.target.value) as PriorityLevel)
-                  }
-                  className="min-h-[48px] rounded-full border border-[var(--line)] bg-[var(--surface)] px-3 font-mono text-xs font-bold text-[var(--fg)]"
-                >
-                  <option value={2}>P2 · Normal</option>
-                  <option value={1}>P1 · Emergency</option>
-                </select>
+          <form
+            onSubmit={submit}
+            className="sticky z-20 -mx-4 border-t border-[var(--line)] bg-[var(--surface)] px-4 py-2"
+            style={{ bottom: 'calc(var(--nav-h) + var(--safe-bottom))' }}
+          >
+            {sendError && <p role="alert" className="mb-2 text-sm font-semibold text-[var(--sos-ink)]">{sendError}</p>}
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                maxLength={500}
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                aria-label={tab === 'everyone' ? 'Message to everyone nearby' : `Private message to ${personName}`}
+                placeholder={tab === 'everyone' ? 'Message everyone nearby' : `Message ${personName}`}
+                className="min-h-12 min-w-0 flex-1 rounded-full border border-[var(--line)] bg-[var(--bg)] px-4 text-base text-[var(--fg)] focus:border-[var(--fg)] focus:outline-none"
+              />
+              <button
+                type="submit"
+                disabled={!draft.trim()}
+                aria-label="Send"
+                className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[var(--verified)] text-[var(--on-verified)] disabled:opacity-50"
+              >
+                <Send aria-hidden="true" className="h-5 w-5" />
+              </button>
+            </div>
+          </form>
+        </>
+      )}
 
-                <input
-                  type="text"
-                  maxLength={500}
-                  value={draftText}
-                  onChange={(e) => setDraftText(e.target.value)}
-                  placeholder={`Encrypted message to ${
-                    selectedPeer?.displayName ?? 'peer'
-                  } (≤ 500 chars)...`}
-                  className="min-h-[48px] flex-1 rounded-full border border-[var(--line)] bg-[var(--surface)] px-4 text-sm text-[var(--fg)] focus:border-[var(--fg)] focus:outline-none"
-                />
-
-                <button
-                  type="submit"
-                  className="flex min-h-[48px] cursor-pointer items-center gap-1.5 rounded-full bg-[var(--accent-green)] px-5 py-2.5 font-grotesk text-sm font-bold text-[var(--on-fill)] transition-transform active:scale-95"
-                >
-                  <Send className="h-4 w-4" />
-                  <span>Send</span>
-                </button>
-              </div>
-            </form>
-          )}
-        </div>
-      </div>
-
-      {/* 3-Tab Packet / Route / Crypto Inspector Modal */}
-      <MessageInspectorModal
-        message={inspectedMsg}
-        onClose={() => setInspectedMsg(null)}
-      />
+      <MessageInspectorModal message={inspected} onClose={() => setInspected(null)} />
+      <HowItWorksSheet open={helpOpen} onClose={() => setHelpOpen(false)} />
     </section>
   );
 }

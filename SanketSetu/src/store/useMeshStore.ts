@@ -191,6 +191,7 @@ export interface MeshStoreState {
     text: string,
     priority?: PriorityLevel
   ) => Promise<StoredMessage>;
+  sendBroadcastMessage: (text: string, priority?: PriorityLevel) => Promise<StoredMessage>;
   broadcastSOS: (params: {
     category: SOSCategoryId;
     text: string;
@@ -1176,6 +1177,20 @@ export const useMeshStore = create<MeshStoreState>((set, get) => ({
       // ignore if IndexedDB unavailable
     }
     set({ inspectedMessageId: msg.id });
+    syncStoreFromEngine(set, get);
+    return msg;
+  },
+
+  sendBroadcastMessage: async (text, priority = 2) => {
+    if (!localEngine) {
+      throw new Error('Mesh engine not initialized');
+    }
+    const msg = await localEngine.sendBroadcastMessage(text, priority);
+    try {
+      await sanketDb.messages.put(msg);
+    } catch {
+      // ignore if IndexedDB unavailable
+    }
     syncStoreFromEngine(set, get);
     return msg;
   },
