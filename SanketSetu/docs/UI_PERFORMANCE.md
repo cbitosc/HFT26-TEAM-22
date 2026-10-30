@@ -7,7 +7,7 @@ shown for JavaScript and CSS. Route chunks are loaded on demand.
 
 | Entry or route | JavaScript | Gzip |
 | --- | ---: | ---: |
-| Shared entry | 463.63 kB | 147.46 kB |
+| Shared entry | 468.48 kB | 148.92 kB |
 | Home | 5.64 kB | 2.23 kB |
 | SOS | 7.50 kB | 2.47 kB |
 | Messages | 20.10 kB | 4.92 kB |

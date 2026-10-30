@@ -1,272 +1,193 @@
-# Sanket Setu — Offline Emergency Mesh Messaging System
+# Sanket Setu
 
-**Team:** Astra  
-**Problem Statement:** Offline Emergency Messaging System (Cybersecurity · Communication Networks · Disaster Management · AI/ML)  
-**Tagline:** *"Stay connected when everything goes dark."*
+**Offline emergency messaging and SOS over a phone-to-phone mesh.** *Setu* means bridge: when towers
+and internet fail, nearby phones become the bridge. Works with no internet or cell signal.
 
-> **Product Thesis:** *Other apps send messages when the network dies. Sanket Setu makes sure help actually arrives: encrypted, acknowledged by verified responders, and bridged back online when any phone finds signal.*
+Team Astra · CBIT Hacktoberfest '26 · HFT26-TEAM-22 · MIT license
 
----
+<p>
+  <img src="docs/screenshots/home.png" width="180" alt="Home with the SOS hold button">
+  <img src="docs/screenshots/sos.png" width="180" alt="SOS composer with pictograms">
+  <img src="docs/screenshots/simulator-benchmark.png" width="180" alt="Congestion benchmark, simulated">
+  <img src="docs/screenshots/mesh-quality.png" width="180" alt="Mesh quality screen">
+</p>
 
-## 1. Problem Statement
+## 1. Problem
 
-When floods, earthquakes, cyclones, or infrastructure blackouts sever cellular towers and fiber backhaul, survivors and field responders lose the ability to coordinate within the first critical hours:
+In disasters and outages, cell towers and internet go down exactly when people most need to reach
+each other. Survivors cannot tell whether an SOS was heard, and plain Bluetooth broadcast tools do
+not authenticate who answers or protect exact locations. We need messaging that works with no
+network, reaches people out of direct range, puts emergencies first, shows what actually happened to
+each message, stays alive on a draining battery, and cannot be read or forged by bystanders.
 
-1. **Zero-Bar Dead Zones:** Standard messaging apps fail immediately without DNS, cloud servers, or cellular carriers.
-2. **Open-Loop Panic:** Even basic Bluetooth broadcast tools leave survivors guessing whether anyone received their SOS or if a qualified rescue team is actually coming.
-3. **Unauthenticated Spoofing & Coordinate Exposure:** Broadcasting raw GPS coordinates in plaintext exposes vulnerable survivors to opportunists and allows malicious nodes to inject forged "rescue en route" messages.
+## 2. Solution
 
-**Sanket Setu** turns Android smartphones into a self-forming, cryptographically authenticated multi-hop mesh network that works **100% offline** in Airplane Mode, closes the loop between survivor and verified responder, and bridges SOS alerts back online (`Setu`) the moment any single node regains connectivity.
+An Android app (React + Capacitor) with an on-device mesh engine and a Kotlin foreground service
+that uses Google Nearby Connections (Bluetooth + Wi-Fi Direct). There is no server. Messages and
+SOS beacons are signed and encrypted, flooded across phones within range, queued when nobody is
+reachable, and re-sent until delivery is confirmed. An optional online AI assistant can summarize,
+translate and suggest alert order. It never blocks the app and never decides for the user.
 
----
+## 3. Architecture
 
-## 2. System Architecture Diagram
-
-```text
-+-----------------------------------------------------------------------------------+
-|                    UI LAYER (React 19 + TypeScript + light-first safety UI)        |
-|  Home · E2E Messages · Closed-Loop SOS · Responder Feed · Circles · Map · Sim     |
-|  Packet / Route / Crypto Inspector · Mesh Quality Telemetry · Optional Online AI  |
-+-----------------------------------------+-----------------------------------------+
-                                          |
-                                          v
-+-----------------------------------------------------------------------------------+
-|                      ZUSTAND STATE & DEXIE PERSISTENCE LAYER                      |
-|  useMeshStore.ts  <--->  Dexie IndexedDB (messages, alerts, outbox, peers, seen)  |
-+-----------------------------------------+-----------------------------------------+
-                                          |
-                                          v
-+-----------------------------------------------------------------------------------+
-|                     CORE MESH ENGINE (src/mesh/engine.ts)                         |
-|  1. 4-Queue Priority Scheduler: P0(SOS) -> P1(Emergency) -> P2(Normal) -> P3(ACK) |
-|  2. Controlled Flooding: TTL 8 (Normal) / 12 (SOS), no echo back to sender        |
-|  3. Jitter & Suppression: 10–50ms (0–10ms SOS) delay; cancel if >=2 overhears     |
-|  4. Replay & Rate Defense: ±5 min timestamp window, 1h SeenCache, token bucket    |
-|  5. Store-and-Forward Outbox: 1s -> 30s exp backoff + SYNC_INV / SYNC_REQ sync    |
-|  6. Crypto (TweetNaCl): Ed25519 sigs + X25519/XSalsa20-Poly1305 E2E & Sealed GPS  |
-+-------------------+-------------------------------------------+-------------------+
-                    |
-                    v
-+-----------------------------------------------------------------------------------+
-|              CompositeTransport.ts (fans the engine out to every radio)           |
-|  Browser (no native bridge): SimTransport only (4-node demo chain)                |
-|  Native Android: NearbyTransport + SimTransport together — real nearby phones     |
-|  AND the seeded demo peers both show up as peers on the same running engine       |
-+---------------------------------------+   +---------------------------------------+
-|       SimTransport.ts (VIRTUAL)       |   |     NearbyTransport.ts (CAPACITOR)    |
-|  4-Node Chain (A <-> B <-> C <-> D)   |   |  Enforces MAX_CONCURRENT = 4 peers    |
-|  Link break, range, latency, loss     |   |  Idle peer rotation + fan-out logging |
-+---------------------------------------+   +-------------------+-------------------+
-                                                                |
-                                                                v
-                                            +---------------------------------------+
-                                            |   ANDROID NATIVE LAYER (Kotlin SDK)   |
-                                            |  NearbyMeshPlugin.kt (P2P_CLUSTER)    |
-                                            |  BLE + Bluetooth Classic + Wi-Fi Dir  |
-                                            |  Deterministic connect tie-break +    |
-                                            |  version-tagged endpoints             |
-                                            |  RelayCore.kt: header-only relay      |
-                                            |  (dedup + TTL decrement only, NOT     |
-                                            |  signature-verified) so forwarding    |
-                                            |  continues while the WebView is       |
-                                            |  throttled (screen off/backgrounded)  |
-                                            |  MeshForegroundService.kt (WakeLock)  |
-                                            +---------------------------------------+
+```mermaid
+flowchart LR
+  UI["UI (React screens, Zustand store)"] --> ENG["Mesh engine (TypeScript)\npriority queues, flooding, outbox, sync,\nsignatures, encryption, delivery state"]
+  ENG --> CT["CompositeTransport"]
+  CT --> NT["NearbyTransport (Capacitor plugin)"]
+  CT --> ST["SimTransport (in-app demo mesh)"]
+  NT --> SVC["Kotlin foreground service\nNearbyMeshPlugin, ConnectionManager,\nRelayCore (header-only relay)"]
+  SVC --> RAD["Bluetooth / BLE / Wi-Fi Direct radios"]
+  ENG --> DB[("Dexie / IndexedDB\noutbox, own messages, seen-cache")]
+  UI -. optional, online only .-> AI["Featherless.ai (Zod-validated, advisory)"]
 ```
 
----
+- `src/core/protocol/constants.ts`: every TTL, jitter, window and threshold in one file.
+- `src/mesh`, `src/crypto`, `src/transport`, `src/db`: core logic. An architecture test fails the build if these import UI code.
+- `plugins/nearby-mesh/android`: Kotlin plugin and foreground service.
+- On a phone the engine runs on **both** the real radio and the simulated demo mesh, so the demo
+  works with one device. The status strip says **Real radio** only when a real Nearby peer is connected.
 
-## 3. Wire Packet Format & Signature Scope
+## 4. Requirement traceability
 
-Every packet transmitted over `SimTransport` or `NearbyTransport` is a compact JSON envelope (`≤ 4096 B`) defined in `src/mesh/types.ts`:
+| # | Requirement | Where | Verified how |
+| --- | --- | --- | --- |
+| 1 | Offline communication | No network calls in `src/mesh`, `src/crypto`, `src/transport`; AI is the only network code | Architecture test; unit tests run with no network |
+| 2 | P2P over local radios | `NearbyTransport`, `NearbyMeshPlugin.kt`, `ConnectionManager.kt` | Compiles (debug APK built earlier). **Two-phone delivery UNVERIFIED** |
+| 3 | Multi-hop relay | `engine.maybeRelayPacket`, `RelayCore.kt` | Tests 4, 12 (A to B to C to D, TTL expiry) on loopback/simulated transport. **Real multi-hop UNVERIFIED** |
+| 4 | SOS with location if permitted | `engine.broadcastSOS`, `sealedLocation.ts` | Tests 6, 9 (none / coarse / precise sealed to responder key) |
+| 5 | Priority for SOS/emergency | `priority.ts` (P0 to P3, strict order) | Tests 7, 25 |
+| 6 | Delivery status | `MessageDeliveryState`, `DeliveryBridge` | Tests 4, 14 (forged ACK ignored) |
+| 7 | Encryption + authentication | `crypto/*`, PIN vault | Tests 1, 2, 10, 13, 16 |
+| 8 | Battery efficiency | `power.ts`, native duty-cycling in `NearbyMeshPlugin.kt` | Schedule math tested. **On-device battery effect UNVERIFIED** |
+| 9 | Recovery and sync | `outbox.ts`, `sync.ts`, retry loop, Dexie restore | Tests 5, 21, 22a, 22b, 23, 24 |
+| AI | Optional assistant | `src/ai/*` | Tests 19, 20 (offline falls back, never throws) |
+
+Extras: closed-loop SOS tracker, responder certificates and sealed GPS, safety circles, signed hazard
+beacons with expiry, alerts (sort, 200 m clustering, rule-based hint), SOS pictograms (EN/HI/TE/TA),
+packet inspector, 4-node simulator with congestion benchmark, mesh map, Mesh Quality screen, Setu
+gateway (DEMO), Rescuer Locate (EXPERIMENTAL, simulated).
+
+## 5. Packet format
+
+JSON envelope, at most 4096 bytes. Types: `HELLO, MSG, SOS, SOS_ACK, SAFE, HAZARD, ACK, SYNC_INV, SYNC_REQ`.
 
 ```json
 {
-  "v": 1,
-  "id": "c7a9f2d0-8e4b-4c1a-9f32-1b5e8d7a6c04",
-  "type": "SOS",
-  "prio": 0,
-  "ttl": 12,
-  "hops": 2,
-  "src": "8F3A19C04B2E7D11",
-  "srcSignPub": "<Base64 Ed25519 Public Key (32B)>",
-  "srcBoxPub": "<Base64 X25519 Public Key (32B)>",
-  "dst": "BROADCAST",
-  "ts": 1742041200000,
-  "nonce": "<Base64 24-byte random nonce>",
-  "payload": "<Base64 XSalsa20-Poly1305 Ciphertext + 16B Poly1305 MAC>",
-  "route": ["8F3A19C04B2E7D11", "4C91E02A7B5D3F88", "9D20B41F6E8A1C55"],
-  "sig": "<Base64 64-byte Ed25519 Detached Signature>"
+  "v": 1, "id": "<32 hex chars (16 random bytes)>", "type": "MSG", "prio": 2,
+  "ttl": 8, "hops": 0,
+  "src": "<8 hex node id>", "srcSignPub": "<base64 Ed25519>", "srcBoxPub": "<base64 X25519>",
+  "dst": "<node id or BROADCAST>", "ts": 1760000000000,
+  "nonce": "<base64, 24 bytes>", "payload": "<base64 ciphertext>",
+  "route": ["<relay ids, appended by relays>"], "sig": "<base64 Ed25519 detached>"
 }
 ```
 
-### Immutable Signature Scope (`src/crypto/sign.ts`)
-Because `ttl`, `hops`, and `route` mutate at each intermediate relay hop, the **Ed25519 signature (`sig`) covers strictly the immutable origin fields** in canonical order:
-`v`, `id`, `type`, `prio`, `src`, `srcSignPub`, `srcBoxPub`, `dst`, `ts`, `nonce`, `payload`.
+The signature covers only `v, id, type, prio, src, srcSignPub, srcBoxPub, dst, ts, nonce, payload`.
+`ttl`, `hops` and `route` change at every relay, so relays never re-sign and `route` is an
+**unauthenticated hint**.
 
-- **Zero Re-Signing by Relays:** Intermediate nodes decrement `ttl`, increment `hops`, and append their `nodeId` to `route` without touching `sig`.
-- **Tamper Rejection:** Any modification to `payload`, `src`, `prio`, `ts`, or `sig` at any hop causes `verifyPacketSignature(packet)` to fail immediately, dropping the packet and incrementing the peer's invalid-signature penalty counter.
+## 6. Parameters
 
----
+| Parameter | Value |
+| --- | --- |
+| TTL | 8 (SOS and SOS ACK: 12) |
+| Relay jitter | 10-50 ms (SOS 0-10 ms); forward cancelled if heard from 2 or more neighbours |
+| Replay window | +/- 5 minutes, plus seen-id check |
+| Seen-cache | about 1 hour, capped at 4096 ids, persisted |
+| Outbox backoff | 1 s doubling to a 30 s cap; retried on every peer found and at app start |
+| Queues | P0 SOS, P1 emergency, P2 normal, P3 info/ACK; P3 then P2 dropped first under congestion or Saver |
+| Battery modes | Balanced below 30% (10 s scan on / 20 s off), Saver below 15% (5 s on / 45 s off, SOS and emergency only), Last-Gasp SOS at 5% or less |
+| Scan backoff | doubles up to 60 s with no peers, resets when a peer appears |
+| Concurrent links | cap of 4, least-recently-active idle link rotated out |
 
-## 4. Priority Scheduler, Controlled Flooding, Jitter & Retry Parameters
+## 7. Security summary
 
-All protocol parameters are centralized in `src/mesh/constants.ts` (`MESH_CONSTANTS`):
+TweetNaCl only: Ed25519 signatures; X25519 + XSalsa20-Poly1305 (`nacl.box` / `nacl.secretbox`).
+Direct messages are end-to-end encrypted. SOS broadcasts use a shared channel key (it only deters
+casual snooping). Precise SOS location is sealed to the responder group key with an ephemeral
+`nacl.box`; everyone else sees about 1 km. First-contact keys are trusted on first use with a
+key-change warning, or verified by QR. Responder acknowledgements count only with a valid authority
+certificate (the authority in this build is a **DEMO** authority).
 
-| Parameter | Constant | Value | Behavior |
-| :--- | :--- | :--- | :--- |
-| **Priority Queues** | `P0..P3` | `4 queues` | `P0` = SOS / SOS_ACK, `P1` = Emergency / Safe / Hazard, `P2` = Normal Direct Chat, `P3` = Info / ACK / Sync. Strictly dequeued `P0 → P1 → P2 → P3`. Under congestion or battery saver (`<15%`), drops `P3` then `P2`; **never drops `P0` or `P1`**. |
-| **Default TTL** | `TTL_NORMAL` / `TTL_SOS` | `8` / `12` | Decremented at every relay hop; packet dropped when `nextTtl <= 0` (`ttl_expired`). Never echoed back to `fromPeerId` or `packet.src`. |
-| **Relay Jitter** | `JITTER_NORMAL` / `JITTER_SOS` | `10–50 ms` / `0–10 ms` | Random forward delay per hop to prevent radio collisions. |
-| **Overhear Suppression** | `OVERHEAR_SUPPRESSION_THRESHOLD` | `2 neighbors` | If the same packet ID is heard from `≥ 2` distinct neighbors while waiting in the jitter timer (`pendingRelayTimers`), `clearTimeout` cancels the scheduled forward immediately. |
-| **Seen-Cache Expiry** | `SEEN_CACHE_TTL_MS` | `3,600,000 ms` (1h) | Deduplicates seen packet IDs for 1 hour; persisted in Dexie (`sanketDb.seen`). |
-| **Replay Window** | `REPLAY_WINDOW_MS` | `±300,000 ms` (±5m) | Packets with `|now - packet.ts| > 5 min` are dropped and logged as `replay_window`. |
-| **Outbox Retry Backoff** | `RETRY_BASE_MS` .. `RETRY_CAP_MS` | `1 s → 30 s` cap | Exponential backoff (`1s, 2s, 4s, 8s, 16s, 30s`) plus immediate retry on `peerFound` and anti-entropy `SYNC_INV` / `SYNC_REQ` reconciliation. Unacknowledged `P0` SOS beacons never expire during an active incident. |
-| **Delivery States** | `DeliveryState` | `PENDING → SENT → RELAYED(n) → DELIVERED` | `DELIVERED` is set **only** when a valid Ed25519-signed `ACK` (`ackKind: "DELIVERED"`) from the intended `recipientId` (or `SOS_ACK` for SOS) is verified. |
+Private keys are encrypted at rest. With a PIN, the vault key is derived from it and kept only in
+memory, so the keys cannot be opened without the PIN. Without a PIN (skippable, with a warning) a
+random key stored on the device is used, which only protects against accidental exposure. Full threat
+model and limits: [docs/SECURITY.md](docs/SECURITY.md).
 
----
+## 8. Setup
 
-## 5. Cryptographic Architecture, Threat Model & Limits
-
-### Cryptographic Primitives (`TweetNaCl` — `XSalsa20-Poly1305` & `Ed25519`)
-All cryptography runs 100% offline in TypeScript (`src/crypto/`) using audited **TweetNaCl**:
-- **Packet Authentication:** `Ed25519` (`nacl.sign.detached` / `nacl.sign.detached.verify`).
-- **Direct Message E2E Encryption (`MSG`):** `X25519` ECDH key agreement + `XSalsa20-Poly1305` authenticated encryption (`nacl.box` / `nacl.box.open`). Intermediate relay nodes cannot read message plaintext.
-- **Emergency Broadcast Channel (`SOS`):** `XSalsa20-Poly1305` (`nacl.secretbox`) keyed with the SHA-512-derived 32-byte Emergency Channel / Circle key.
-- **Responder-Sealed Precise GPS (`src/crypto/sealedLocation.ts`):** When a survivor sends an SOS with precise location enabled, exact GPS coordinates (`lat, lng, accuracy, altitude`) are sealed via `nacl.box` (`X25519-XSalsa20-Poly1305`) to the **Responder Group X25519 public key**, while only coarse (`~1 km`) coordinates appear in the general broadcast cleartext.
-- **Verified Responder Certificates (`src/crypto/responderCert.ts`):** Offline `Ed25519` certificates signed by the `DEMO AUTHORITY` root key bind a responder's `nodeId`, `signPub`, `role` (`NDRF_MEDIC`, `FIRE_RESCUE`, `CIVIL_DEFENSE`, `POLICE`), and expiry timestamp.
-- **Key Storage at Rest (`src/crypto/identity.ts`):** The Ed25519/X25519 secret keys are never stored in plaintext. They are split from the public identity fields and persisted encrypted (`nacl.secretbox`) under a random 256-bit per-install local vault key (`db/dexie.ts: getOrCreateLocalVaultKey`). This protects against accidental plaintext exposure (exports, screenshots, casual DB inspection) but — like any key stored alongside its own ciphertext on the same device — does **not** protect against an attacker with full local filesystem/IndexedDB access; there is no PIN-unlock screen gating app launch yet, so the optional onboarding PIN currently only encrypts a separate, not-yet-wired-up portable backup blob. `NearbyMeshPlugin.ensureHardwareKeyBacked()` provisions an `AES-256-GCM` key in the hardware-backed `AndroidKeyStore`, but it is not yet used to wrap the identity vault — wiring that up is the natural next hardening step. See `docs/SECURITY.md` for the full threat model.
-
-### Threat Model & Limits
-1. **Bundled Emergency Channel Key:** The default public emergency channel key (`SANKET-SETU-DEFAULT-EMERGENCY-CHANNEL-KEY-V1`) is shared across all nodes so any nearby civilian phone can display coarse SOS alerts. It **only stops casual passive snooping** by non-protocol listeners. For confidential group broadcasts, users can configure a custom secret key or scan a Family Circle QR code.
-2. **Compromised Responder Device Exposure:** Because offline nodes cannot query an online CRL/OCSP server during a blackout, a physically compromised responder phone holding the Responder Group secret key can unseal precise SOS coordinates until the Responder Group keypair and Authority certificates are rotated.
-3. **No Defense Against State-Level Adversaries:** Sanket Setu defends against packet tampering, replay attacks (`±5 min`), unauthorized responder impersonation, and casual eavesdropping in disaster zones. It does **not** defend against state-level RF direction finding, traffic-analysis metadata correlation, or physical side-channel extraction of an unlocked device.
-
----
-
-## 6. Known Limitations
-
-1. **Concurrent Connection Cap (`3–5` Peers per Device):** Google Nearby Connections (`Strategy.P2P_CLUSTER` over Bluetooth + BLE + Wi-Fi Direct) reliably sustains `3–5` simultaneous bidirectional socket connections per Android handset. `NearbyMeshPlugin.kt` and `NearbyTransport.ts` explicitly enforce `MAX_CONCURRENT_CONNECTIONS = 4`, automatically rotating out the oldest idle neighbor when a 5th peer connects and logging a `fanOutLimit` event. Multi-hop store-and-forward and `SYNC_INV` epidemic sync bridge larger clusters across time.
-2. **Soft Real-Time Store-and-Forward:** Because packets experience per-hop jitter (`10–50 ms`), radio switching overhead, and intermittent neighbor disconnects, Sanket Setu is a **soft real-time delay-tolerant mesh**, not a synchronous voice/video link.
-3. **Battery vs. Connectivity Trade-Off:** Continuous `P2P_CLUSTER` scanning (`Active` 100% duty cycle) consumes more battery than `Balanced` (`10s scan / 20s sleep`, 33% duty) or `Emergency Saver` (`5s scan / 45s sleep`, 10% duty, relays only `P0/P1`). At `≤ 5%` battery, Sanket Setu emits a final **Last-Gasp SOS** and enters `Emergency Saver`.
-4. **Android + Google Play Services Requirement:** Native physical-radio mesh transport requires Android 8.0+ (API 26+, Android 12+ nearby permissions) with Google Play Services (`play-services-nearby:19.3.0`). Browser mode uses the deterministic in-memory `SimTransport` virtual mesh. iOS is out of scope (Nearby Connections is Android/Play-Services-only).
-5. **Native relay forwards unverified packets:** `RelayCore.kt`'s header-only relay (see architecture diagram) does not check Ed25519 signatures — it only reads `id`/`ttl`/`hops` to dedup and forward. It exists so the mesh keeps relaying other nodes' traffic while the WebView is throttled; the TypeScript `MeshEngine` remains the sole authority for signature verification, decryption, and all UI/delivery state, which it performs independently on every payload regardless of what RelayCore does. The practical consequence: a malicious peer can burn nearby devices' radio/battery with fabricated packets without a valid signature, bounded only by TTL and the dedup cache, not by any trust check at that layer. Full threat model in `docs/SECURITY.md`.
-6. **Identity vault is device-local, not PIN-gated:** see "Key Storage at Rest" above — the running app currently auto-unlocks via a local vault key rather than requiring the onboarding PIN on each launch. There is no PIN-unlock screen shown on app launch.
-7. **Signature verification runs on the main thread, not a Web Worker:** `verifyPacketSignature` (`src/crypto/sign.ts`) is called synchronously inside `MeshEngine.handleRawBytes` on every incoming packet. Only PIN-identity decryption currently uses a Web Worker (`src/crypto/crypto.worker.ts` via `cryptoWorkerClient.ts`). Under a packet flood this could cause UI jank; offloading signature verification (and ideally batch-verification) to a worker is a known remaining piece of work, not yet done.
-
----
-
-## 7. Setup, Build & Test Instructions
-
-### Run Unit & Integration Tests (`node:test` via `tsx`)
 ```bash
 npm install
-npm test
-```
-Runs the automated test suite in `tests/mesh.test.ts` verifying:
-- Ed25519 signature verification & tampered payload rejection
-- X25519 + XSalsa20-Poly1305 E2E direct encryption & wrong-recipient rejection
-- Seen-cache deduplication & overhear suppression (`≥ 2` neighbors)
-- Active jitter timer cancellation (`clearTimeout`) when `≥ 2` neighbor copies arrive during the wait window
-- TTL decrement (`8` normal, `12` SOS) and `TTL=0` drop logging
-- Replay window (`±5 min`) rejection and structured drop logging
-- Forged `ACK` / `SOS_ACK` rejection (`DELIVERED` requires authentic recipient signature)
-- 4-queue priority scheduler (`P0 → P1 → P2 → P3`) under congestion load
-- 4-node multi-hop relay (`A → B → C → D`), mid-flight link break (`B ↔ C`), store-and-forward queuing, and `SYNC_INV` / `SYNC_REQ` recovery
-- Verified Responder Certificates & Responder-Sealed Precise GPS location privacy
-
-### Run in Browser (Interactive 4-Node Virtual Mesh Simulator)
-```bash
-npm run dev
-```
-Opens on `http://localhost:3000`. Works 100% offline after load.
-
-### Build & Run on Physical Android Devices (Capacitor 8)
-
-The `android/` Capacitor platform is committed to this repo (`npx cap add android` has
-already been run), with the native mesh plugin (`plugins/nearby-mesh/android/`) wired in
-as a Gradle library module the app depends on — you do not need to recreate either.
-
-**JDK requirement:** `@capacitor/android` 8.6's own Gradle module targets Java 21 bytecode,
-so building needs a **JDK 21** on `JAVA_HOME` (not whatever `java -version` on your PATH
-happens to be — JDK 11/17 fail with "invalid source release: 21", and JDK 25/26 fail
-Gradle itself with "Unsupported class file major version"). If you don't already have one:
-```bash
-brew install openjdk@21
+npm run dev                 # browser build with the simulated mesh, http://localhost:3000
+npm run typecheck && npm test && npm run build
+npm run contrast            # WCAG AA check of every colour pair, both themes
 ```
 
-**Option A — Android Studio (recommended for first-time setup/testing):**
-1. Open Android Studio → **Open** → select the `SanketSetu/android` folder (not `SanketSetu/`
-   itself — that's the web project root, `android/` is the native platform).
-2. If prompted to upgrade the Gradle wrapper, **decline** — this project is pinned to
-   Gradle 8.14.3 + AGP 8.13.0, which is what's been verified to build.
-3. Settings → Build, Execution, Deployment → Build Tools → Gradle → **Gradle JDK**: pick a
-   JDK 21 (e.g. the `openjdk@21` installed above, or "Download JDK..." → 21 → Eclipse Temurin).
-4. Let Gradle sync, then Run ▶ on a connected device or emulator (minSdk 26 / Android 8.0+).
+### Android
 
-**Option B — command line:**
+Needs JDK 21 (Capacitor Android 8 compiles Java 21; JDK 17 and JDK 25+ both fail), the Android SDK,
+and Google Play Services on the phone (Android 8.0+, API 26).
+
 ```bash
-npm install
-npm run build              # builds dist/ from the web app
-npx cap sync android       # copies dist/ + plugin config into android/
+npm run build && npx cap sync android
 cd android
-JAVA_HOME="$(brew --prefix openjdk@21)" ANDROID_HOME="$HOME/Library/Android/sdk" \
-  ./gradlew assembleDebug  # -> android/app/build/outputs/apk/debug/app-debug.apk
-# install on a connected/USB-debugging device:
-JAVA_HOME="$(brew --prefix openjdk@21)" ANDROID_HOME="$HOME/Library/Android/sdk" \
-  ./gradlew installDebug
+export JAVA_HOME="$(brew --prefix openjdk@21)" ANDROID_HOME="$HOME/Library/Android/sdk"
+./gradlew assembleDebug     # android/app/build/outputs/apk/debug/app-debug.apk
 ```
 
-After editing any TypeScript/React source, re-run `npm run build && npx cap sync android`
-before rebuilding the APK — the native project only ever sees what's in `dist/`, it doesn't
-watch `src/`.
+Open `SanketSetu/android` (not the repo root) in Android Studio and decline any Gradle upgrade prompt:
+the project is pinned to Gradle 8.14.3 and AGP 8.13. Real mesh behaviour needs two or more physical
+phones; follow [docs/HARDWARE_TEST_CHECKLIST.md](docs/HARDWARE_TEST_CHECKLIST.md) (start with the
+10-minute smoke test).
 
-**Testing real mesh behavior needs two physical Android phones** (an emulator can't exercise
-Bluetooth/Wi-Fi Direct radios against a second device) with Bluetooth and Wi-Fi left on. See
-`docs/HARDWARE_TEST_CHECKLIST.md` for the exact test matrix — everything on it is marked
-UNVERIFIED until a human runs it on real hardware.
+### Static demo site
 
----
+`vercel.json` and `netlify.toml` publish `dist/` (the simulated mesh) as a static site.
 
-## 8. 3-Minute Judge Demo Script
+## 9. Tests
 
-1. **0:00 – 0:40 | Offline Proof & Closed-Loop SOS (`HOME` / `SOS & TRACKER`):**
-   - Toggle Airplane Mode / Offline. Hold the coral SOS ring for 3 seconds (or tap a multilingual Hindi/Telugu/Tamil Quick-SOS pictogram).
-   - Show the **4-Step Closed-Loop SOS Tracker** (`1. Broadcast Sent → 2. Relayed by N Peers → 3. Verified Responder ACK → 4. Help En Route`).
-2. **0:40 – 1:30 | Verified Responder Certs & Sealed Precise GPS (`RESPONDER FEED`):**
-   - Open `RESPONDER FEED`. Point out that unverified civilian nodes only see coarse (`~1 km`) coordinates (`SEALED TO RESPONDER KEY`).
-   - Use the simulator's responder tools to show the verified responder badge and sealed location flow. The simulated responder is marked as a demo; real responder enrollment and GPS accuracy need device testing.
-3. **1:30 – 2:25 | 4-Node Multi-Hop, Link Break & Congestion Benchmark (`SIMULATOR`):**
-   - Open `SIMULATOR`. Click **"1. send e2e message a → d (3 hops)"** and inspect the route and packet in the Packet Inspector.
-   - Click **"2. break middle link (b↔c)"**, send another message, then click **"2. restore middle link (b↔c) & sync"** to see the queued simulator packet resume.
-   - Run **"4. Congestion Benchmark (P0 SOS vs P2/P3)"** to compare simulated SOS latency with normal traffic. The panel labels estimates as `SIMULATED`; this aggregate result does not provide p50/p95 distributions.
-4. **2:25 – 3:00 | Safety Circles, Hazard Map & Optional Online AI (`SAFE & HAZARDS` / `AI TRIAGE`):**
-   - Send a 1-tap **"I'm Safe"** family circle check-in and view signed hazard reports on the `MESH MAP`.
-   - Open `AI TRIAGE` to show that when offline, the rule-based keyword classifier runs locally while Featherless.ai is cleanly disabled; when online, AI triage outputs carry the `"AI suggestion, use your judgment."` disclaimer.
+`npm test` runs 28 deterministic tests with `node:test` (no network, no real clock dependence beyond
+short waits): signatures, tamper and replay rejection, forged ACKs, TTL, dedup, jitter and
+suppression, priority under flood, rate limiting, 4-node multi-hop, link break and sync, outbox retry
+and restore, sealed GPS, responder certificates, identity vault, geo clustering, benchmark statistics,
+offline AI behaviour, and the core-never-imports-UI architecture rule.
 
----
+## 10. Performance
 
-## 9. Screenshots
+Initial load (production build): main chunk 468 kB (149 kB gzip) plus a 40 kB stylesheet; screens
+load on demand (3 to 23 kB each, AI assistant 97 kB). The optional 3D visual (917 kB) loads only
+when switched on in Settings. Before the redesign the Home route alone shipped about 1.7 MB.
+Details in [docs/UI_PERFORMANCE.md](docs/UI_PERFORMANCE.md). Frame rate and battery were **not**
+measured on a phone; judge them on a release build, not an emulator.
 
-Capture screenshots in the default light theme. For browser captures, run `npm run dev`, open
-`http://localhost:3000`, and set the browser viewport to **360 × 800** (also check 412 × 915).
-For Android, install the debug APK, set the app to light mode in **More → Settings**, open the
-screen to capture, then run:
+## 11. Known limitations
 
-```bash
-mkdir -p docs/screenshots
-adb exec-out screencap -p > docs/screenshots/home-light.png
-```
+- **Soft real-time, best effort.** No latency guarantee. Benchmark numbers come from the simulated mesh.
+- Google Nearby Connections sustains roughly 3 to 5 simultaneous links per phone (device dependent); we cap at 4.
+- Battery versus connectivity is a trade-off: Balanced and Saver find peers more slowly.
+- Android with Google Play Services only. No iOS.
+- **The native relay forwards unverified packets.** `RelayCore.kt` only reads `id/ttl/hops` to keep relaying while the WebView is throttled; the TypeScript engine does all signature checks and decryption. A malicious nearby device can make phones spend radio and battery on junk, bounded by TTL and the dedup cache.
+- **Signature verification runs on the main thread**, not a Web Worker. Under a packet flood this can cause UI jank.
+- The PIN KDF is an iterated SHA-512 stretch, not a vetted KDF; Android Keystore wrapping is not wired in. Without a PIN, the key sits beside its ciphertext.
+- Only this phone's own messages, SOS alerts and outbox are restored after a restart; received message history is not.
+- RSSI and link quality for real peers are constant placeholders (Nearby Connections does not expose them), so Rescuer Locate is a simulated prototype.
+- The Responder Authority and its group key are a built-in **DEMO** authority; there is no revocation or key rotation.
+- No Android SDK was available when the last native changes (splash theme) were written, so rebuild before relying on them.
 
-Repeat for `sos-tracker-light.png`, `packet-inspector-light.png`,
-`simulator-light.png`, and `map-light.png`, opening each screen before capture. Keep the
-`SIMULATED` or `REAL RADIO` indicator visible in captures that show mesh status. Add approved
-images to this section with Markdown image links; no device screenshots are checked in yet.
+## 12. Screenshots
 
-See [UI performance notes](docs/UI_PERFORMANCE.md) for current production chunk sizes and what
-has not been measured on a real phone.
+Light theme, 360x800, from `node scripts/capture-screenshots.mjs` (needs the preview server and Chrome):
+[home](docs/screenshots/home.png), [SOS](docs/screenshots/sos.png), [chat](docs/screenshots/chat.png),
+[alerts](docs/screenshots/alerts.png), [circles](docs/screenshots/circles.png), [map](docs/screenshots/map.png),
+[mesh quality](docs/screenshots/mesh-quality.png), [benchmark](docs/screenshots/simulator-benchmark.png),
+[settings](docs/screenshots/settings.png), [splash](docs/screenshots/splash.png), [onboarding](docs/screenshots/onboarding-1.png).
+Screenshots are browser captures of the simulated mesh, not real-radio sessions.
 
-## 10. Attribution & Disclosure
+## 13. Team and license
 
-- All mesh engine, cryptography (`Ed25519` / `X25519` / `XSalsa20-Poly1305`), responder certificate authority, sealed location, store-and-forward outbox, anti-entropy sync, virtual multi-node simulator, and Android Capacitor `NearbyMeshPlugin` code was written for **Sanket Setu** by Team Astra.
-- The visual design uses a light-first safety interface with bundled Noto Sans fonts. The optional 3D mesh visual is off by default and can be enabled in Settings.
+Team Astra: Golconda Dhanush Kumar (lead), Deepak Prajapati, GS Nishanth, Satyavarapu Subhash Raj,
+V. Ruthvik Bhaskar. MIT, see [LICENSE](LICENSE). Mesh engine, crypto, plugin and UI were written for
+this hackathon; fonts are Noto Sans (SIL OFL) via `@fontsource`. The AI assistant is optional and uses
+Featherless.ai when you provide a key (`VITE_FEATHERLESS_API_KEY`; a key in a client bundle can be
+extracted, so use a throwaway key).

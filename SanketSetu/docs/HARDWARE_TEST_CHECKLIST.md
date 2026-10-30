@@ -44,6 +44,16 @@ this section alone is the bar for "it works at all."
 
 **Result:** PASS / FAIL (circle one) — date tested: __________ — devices used: __________
 
+## 0b. Added since the first checklist (all UNVERIFIED on real phones)
+
+- [ ] **First run:** splash shows real init steps, onboarding appears once, **Allow permissions** raises the Android dialogs for the API level of the phone (API 31+: Nearby/Bluetooth; API 33+: Nearby Wi-Fi and notifications). Deny them once: setup still completes and the Open settings button works.
+- [ ] **PIN:** set a PIN, force-stop the app, reopen: the PIN screen appears; a wrong PIN is rejected; the right PIN opens the app and the same node id.
+- [ ] **Restart recovery:** with the other phone out of range, send a message and an SOS; force-stop and reopen; bring the other phone in range. The queued message and SOS are re-sent without any tap, and the message reaches DELIVERED.
+- [ ] **SOS repeats until verified ack:** an SOS from phone A keeps appearing at B until B (enrolled as demo responder) acknowledges; an acknowledgement from a non-enrolled phone shows Unverified and A keeps repeating.
+- [ ] **Launch flash:** with the phone in system dark mode, cold start shows a light splash, never a dark flash. (Needs a rebuilt APK: the splash theme was changed without the SDK available to compile it.)
+- [ ] **Release performance:** judge scrolling and the SOS hold ring on a RELEASE build on a mid-range phone, not an emulator.
+- [ ] **Rescuer Locate** is expected to show simulated signal values on real radios (Nearby does not expose RSSI). Confirm it is labelled EXPERIMENTAL and SIMULATED.
+
 ## 1. Basic two-phone pairing and messaging (airplane mode, BT+Wi-Fi on)
 
 - [ ] Put both phones in Airplane Mode, then manually re-enable Bluetooth and Wi-Fi (confirms no
@@ -137,5 +147,5 @@ this section alone is the bar for "it works at all."
 
 **Status:** every box above is UNVERIFIED as of this document's creation. The code has been
 built and compiles (`./gradlew assembleDebug` succeeds — see README), and the mesh protocol
-logic is unit-tested against simulated transports (`npm test`, 20/20 passing), but none of the
+logic is unit-tested against simulated transports (`npm test`, 28/28 passing), but none of the
 above has been run against real Android radios yet.

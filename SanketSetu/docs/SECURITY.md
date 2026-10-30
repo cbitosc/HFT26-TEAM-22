@@ -74,28 +74,26 @@ invalidating the signature. The UI should (and currently does, via the packet in
    the Demo Authority keypair, or an individual node's identity keypair without a full app reset
    (`clearAllLocalData`), which also discards all local message/alert history.
 
-## Identity key storage — exactly what happens today
+## Identity key storage: exactly what happens today
 
 `src/crypto/identity.ts` + `src/store/useMeshStore.ts`:
 
-- A node's Ed25519 and X25519 **secret** keys are never written to storage in plaintext. They
-  are split from the public identity fields (node ID, display name, public keys — safe to store
-  plaintext) and encrypted with `nacl.secretbox` under a random 256-bit **local vault key**
-  (`db/dexie.ts: getOrCreateLocalVaultKey`), generated once per install and stored alongside the
-  ciphertext in the same IndexedDB.
-- **What this protects against:** accidental plaintext exposure — a DB export, a screenshot of
-  dev tools, a support screen-share, a casual `grep` through exported data.
-- **What this does NOT protect against:** an attacker with full read access to the device's
-  local storage (the key lives right next to what it encrypts). Real protection against that
-  threat requires either (a) wrapping the vault key with the Android Keystore hardware-backed
-  AES key that `NearbyMeshPlugin.ensureHardwareKeyBacked()` already provisions but does not yet
-  use for this purpose, or (b) a PIN-gated unlock screen shown on every app launch that derives
-  the vault key from a PIN the user enters (not yet built — onboarding collects an optional PIN
-  and encrypts a separate portable backup blob with it, but nothing currently reads that blob
-  back to unlock the running app).
-- This is a known, scoped limitation, not an oversight — it is accurately reflected in the UI
-  copy and this document rather than claimed as "PIN-protected" or "hardware-backed" when it
-  isn't yet wired up end to end.
+- The Ed25519 and X25519 **secret** keys are never stored in plaintext. Public identity fields are
+  stored as-is; the two secret keys are encrypted with `nacl.secretbox` under a 256-bit vault key.
+- **With a PIN (chosen at first run or later):** the vault key is derived from the PIN and a random
+  salt, exists only in memory for the session, and the random on-device key is deleted. Opening the
+  app shows a PIN screen; without the PIN the secret keys cannot be decrypted. Forgetting the PIN
+  means the keys are unrecoverable. The derivation is an iterated SHA-512 stretch (2048 rounds), which
+  is **not** a vetted password KDF (scrypt/Argon2/PBKDF2) and is weak against offline guessing of a
+  short PIN by someone who copies the storage.
+- **Without a PIN (the user can skip, after a warning):** a random vault key is stored on the same
+  device beside the ciphertext. That only protects against accidental exposure (exports, screenshots,
+  casual inspection), **not** against anyone with read access to the app's storage.
+- **Not implemented:** wrapping the vault key with the Android Keystore. `ensureHardwareKeyBacked()`
+  creates a Keystore key but nothing uses it yet.
+- Also stored in IndexedDB: this node's own sent messages, SOS alerts, and the unacknowledged outbox
+  (restored after a restart). Message text for DMs is the plaintext the user typed; it is **not**
+  encrypted at rest. The seen-cache stores packet ids only.
 
 ## Reporting
 
