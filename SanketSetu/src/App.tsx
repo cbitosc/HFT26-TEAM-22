@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { Suspense, lazy, useEffect, useState } from 'react';
 import { AppScreenId, MOBILE_TABS } from './content';
 import { useReducedMotion } from './hooks/useReducedMotion';
 import { soundEngine } from './lib/audio';
@@ -20,18 +20,53 @@ import { Grain } from './components/Grain';
 import { CircularText } from './components/CircularText';
 import { TopBar } from './app/TopBar';
 import { BottomPillNav } from './app/BottomPillNav';
-
-import { HomeScreen } from './screens/HomeScreen';
-import { OnboardingScreen } from './screens/OnboardingScreen';
-import { MessagesScreen } from './screens/MessagesScreen';
-import { SOSComposerScreen } from './screens/SOSComposerScreen';
-import { AlertsFeedScreen } from './screens/AlertsFeedScreen';
-import { CirclesSafetyScreen } from './screens/CirclesSafetyScreen';
-import { MeshMapScreen } from './screens/MeshMapScreen';
-import { SimulatorScreen } from './screens/SimulatorScreen';
-import { AIAssistantScreen } from './screens/AIAssistantScreen';
-import { SettingsScreen } from './screens/SettingsScreen';
 import { useMeshStore } from './store/useMeshStore';
+
+// Lazy-loaded per route: HomeScreen alone pulls in the Three.js/R3F Orb (~500KB+ gzipped), so
+// keeping every screen out of the main entry chunk means that cost is only paid for the routes
+// that are actually visited, and screens other than Home never download it at all.
+const HomeScreen = lazy(() =>
+  import('./screens/HomeScreen').then((m) => ({ default: m.HomeScreen }))
+);
+const OnboardingScreen = lazy(() =>
+  import('./screens/OnboardingScreen').then((m) => ({ default: m.OnboardingScreen }))
+);
+const MessagesScreen = lazy(() =>
+  import('./screens/MessagesScreen').then((m) => ({ default: m.MessagesScreen }))
+);
+const SOSComposerScreen = lazy(() =>
+  import('./screens/SOSComposerScreen').then((m) => ({ default: m.SOSComposerScreen }))
+);
+const AlertsFeedScreen = lazy(() =>
+  import('./screens/AlertsFeedScreen').then((m) => ({ default: m.AlertsFeedScreen }))
+);
+const CirclesSafetyScreen = lazy(() =>
+  import('./screens/CirclesSafetyScreen').then((m) => ({ default: m.CirclesSafetyScreen }))
+);
+const MeshMapScreen = lazy(() =>
+  import('./screens/MeshMapScreen').then((m) => ({ default: m.MeshMapScreen }))
+);
+const SimulatorScreen = lazy(() =>
+  import('./screens/SimulatorScreen').then((m) => ({ default: m.SimulatorScreen }))
+);
+const AIAssistantScreen = lazy(() =>
+  import('./screens/AIAssistantScreen').then((m) => ({ default: m.AIAssistantScreen }))
+);
+const SettingsScreen = lazy(() =>
+  import('./screens/SettingsScreen').then((m) => ({ default: m.SettingsScreen }))
+);
+
+function ScreenLoadingFallback() {
+  return (
+    <div className="flex min-h-[60vh] w-full items-center justify-center">
+      <div
+        className="h-8 w-8 animate-spin rounded-full border-2 border-[var(--line)] border-t-[var(--accent-green)]"
+        role="status"
+        aria-label="Loading"
+      />
+    </div>
+  );
+}
 
 function resolveScreenFromHash(hash: string): AppScreenId | null {
   const clean = hash.replace(/^#\/?/, '').trim().toLowerCase();
@@ -205,32 +240,34 @@ export default function App() {
 
       {/* Active Screen Content */}
       <main className="relative z-10 w-full">
-        {activeScreen === 'home' && (
-          <HomeScreen
-            theme={uiState.theme}
-            reducedMotion={reducedMotion}
-            onNavigate={handleNavigate}
-          />
-        )}
-        {activeScreen === 'onboarding' && (
-          <OnboardingScreen onCompleteNavigate={handleNavigate} />
-        )}
-        {activeScreen === 'messages' && <MessagesScreen />}
-        {activeScreen === 'sos' && (
-          <SOSComposerScreen onNavigate={handleNavigate} />
-        )}
-        {activeScreen === 'alerts' && (
-          <AlertsFeedScreen onNavigate={handleNavigate} />
-        )}
-        {activeScreen === 'circles' && (
-          <CirclesSafetyScreen onNavigate={handleNavigate} />
-        )}
-        {activeScreen === 'map' && (
-          <MeshMapScreen onNavigate={handleNavigate} />
-        )}
-        {activeScreen === 'simulator' && <SimulatorScreen />}
-        {activeScreen === 'ai' && <AIAssistantScreen />}
-        {activeScreen === 'settings' && <SettingsScreen />}
+        <Suspense fallback={<ScreenLoadingFallback />}>
+          {activeScreen === 'home' && (
+            <HomeScreen
+              theme={uiState.theme}
+              reducedMotion={reducedMotion}
+              onNavigate={handleNavigate}
+            />
+          )}
+          {activeScreen === 'onboarding' && (
+            <OnboardingScreen onCompleteNavigate={handleNavigate} />
+          )}
+          {activeScreen === 'messages' && <MessagesScreen />}
+          {activeScreen === 'sos' && (
+            <SOSComposerScreen onNavigate={handleNavigate} />
+          )}
+          {activeScreen === 'alerts' && (
+            <AlertsFeedScreen onNavigate={handleNavigate} />
+          )}
+          {activeScreen === 'circles' && (
+            <CirclesSafetyScreen onNavigate={handleNavigate} />
+          )}
+          {activeScreen === 'map' && (
+            <MeshMapScreen onNavigate={handleNavigate} />
+          )}
+          {activeScreen === 'simulator' && <SimulatorScreen />}
+          {activeScreen === 'ai' && <AIAssistantScreen />}
+          {activeScreen === 'settings' && <SettingsScreen />}
+        </Suspense>
       </main>
 
       {/* Bottom-Right Rotating Circular Badge */}
