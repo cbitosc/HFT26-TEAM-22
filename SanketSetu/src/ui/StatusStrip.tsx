@@ -16,7 +16,7 @@ const POWER_LABEL: Record<string, string> = {
 
 function Item({ children }: { children: ReactNode }) {
   return (
-    <span className="inline-flex shrink-0 items-center gap-1 text-[0.8125rem] leading-5 font-semibold whitespace-nowrap">
+    <span className="inline-flex min-w-0 items-center gap-1 text-[0.8125rem] leading-5 font-semibold whitespace-nowrap">
       {children}
     </span>
   );
@@ -34,7 +34,7 @@ export function StatusStrip() {
     <div
       role="status"
       aria-label="Connection status"
-      className="flex min-h-[var(--status-h)] flex-wrap items-center gap-x-3 gap-y-1 border-b border-[var(--line)] bg-[var(--surface-2)] px-3 py-1.5 text-[var(--fg)]"
+      className="grid min-h-[var(--status-h)] grid-cols-2 items-center gap-x-3 gap-y-1 border-b border-[var(--line)] bg-[var(--surface-2)] px-4 py-1.5 text-[var(--fg)] min-[430px]:flex min-[430px]:flex-wrap"
     >
       <Item>
         {demo ? (

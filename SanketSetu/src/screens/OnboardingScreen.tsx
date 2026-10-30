@@ -87,7 +87,7 @@ export function OnboardingScreen({ onCompleteNavigate }: OnboardingScreenProps) 
   };
 
   return (
-    <section className="mx-auto flex min-h-[calc(100vh-var(--header-h))] w-full max-w-lg flex-col gap-5 px-4 pt-6 pb-8">
+    <section className="mx-auto flex min-h-screen w-full max-w-lg flex-col gap-5 px-4 pt-[calc(var(--safe-top)+24px)] pb-[calc(var(--safe-bottom)+32px)]">
       <p className="text-sm font-semibold text-[var(--fg-secondary)]" aria-live="polite">Step {step} of 3</p>
 
       {step === 1 && (

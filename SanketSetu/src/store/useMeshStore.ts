@@ -692,12 +692,6 @@ async function setupMesh(
   localEngine.onStateChange(() => {
     scheduleThrottledSync(set, get);
   });
-  localEngine.onIncomingAlert((alert) => {
-    // Only a signed, verified, newly received SOS reaches here (the engine drops everything else).
-    alertIncoming(alert);
-    set({ incomingAlertId: alert.id });
-    syncStoreFromEngine(set, get);
-  });
 
   await localEngine.start();
   for (const v of virtuals) await v.engine.start();
@@ -708,6 +702,14 @@ async function setupMesh(
     simController.recomputeNeighborhoods();
     await seedDemoTraffic(userIdentity, virtuals);
   }
+
+  // Registered after demo seeding so fixture alerts never pop up the full-screen card.
+  localEngine.onIncomingAlert((alert) => {
+    // Only a signed, verified, newly received SOS reaches here (the engine drops everything else).
+    alertIncoming(alert);
+    set({ incomingAlertId: alert.id });
+    syncStoreFromEngine(set, get);
+  });
 
   const medic = virtuals[2];
   set({

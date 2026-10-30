@@ -16,6 +16,12 @@ const config: CapacitorConfig = {
     webContentsDebuggingEnabled: true,
   },
   plugins: {
+    // Web content stays below the status bar and above the gesture bar; the app reads the insets
+    // from the injected --safe-area-inset-* CSS variables (src/ui/tokens.css).
+    SystemBars: {
+      insetsHandling: 'css',
+      initialViewportFitValueHint: 'cover',
+    },
     NearbyMesh: {
       serviceId: 'org.sanket.mesh.p2p.cluster',
       strategy: 'P2P_CLUSTER',

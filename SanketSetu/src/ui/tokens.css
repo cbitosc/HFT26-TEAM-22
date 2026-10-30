@@ -67,8 +67,10 @@
   --header-h: 52px;
   --status-h: 36px;
   --nav-h: 64px;
-  --safe-top: env(safe-area-inset-top, 0px);
-  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  /* Capacitor's SystemBars plugin injects --safe-area-inset-* (works on every Android WebView
+     version); env() covers browsers and newer WebViews. Only one source is used, never both added. */
+  --safe-top: var(--safe-area-inset-top, env(safe-area-inset-top, 0px));
+  --safe-bottom: var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px));
 
   /* Typography */
   --font-ui: 'Noto Sans', 'Noto Sans Devanagari', 'Noto Sans Telugu', 'Noto Sans Tamil',

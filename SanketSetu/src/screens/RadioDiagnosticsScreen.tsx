@@ -5,7 +5,7 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import { Check, Copy, X } from 'lucide-react';
+import { Check, X } from 'lucide-react';
 import { getRadioDiagnostics, useMeshStore } from '../store/useMeshStore';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
@@ -57,7 +57,8 @@ export function RadioDiagnosticsScreen() {
   const ensureRadio = useMeshStore((s) => s.ensureRadio);
   const requestMeshPermissions = useMeshStore((s) => s.requestMeshPermissions);
   const openAppSettings = useMeshStore((s) => s.openAppSettings);
-  const [diag, setDiag] = useState<Diag | null>(null);
+  // undefined = still reading, null = this device has no native radio
+  const [diag, setDiag] = useState<Diag | null | undefined>(undefined);
   const [copied, setCopied] = useState(false);
 
   const refresh = useCallback(async () => {
@@ -102,8 +103,8 @@ export function RadioDiagnosticsScreen() {
       <h1 className="text-2xl font-bold text-[var(--fg)]">Radio diagnostics</h1>
       <p className="text-sm text-[var(--fg-secondary)]">Live state of the Bluetooth and Wi-Fi Direct radio. Share this when two phones do not connect.</p>
 
-      {!diag && <p role="status" className="text-base text-[var(--fg-secondary)]">Reading radio state…</p>}
-      {diag && !n && (
+      {diag === undefined && <p role="status" className="text-base text-[var(--fg-secondary)]">Reading radio state…</p>}
+      {(diag === null || (diag && !n)) && (
         <Card className="p-4">
           <p className="text-base font-semibold text-[var(--fg)]">No native radio on this device.</p>
           <p className="mt-1 text-sm text-[var(--fg-secondary)]">This is a browser or an unsupported device. Install the Android app on two phones to test.</p>
@@ -165,11 +166,10 @@ export function RadioDiagnosticsScreen() {
 
       <div className="grid grid-cols-2 gap-3">
         <Button type="button" tone="primary" onClick={() => void copy()} disabled={!diag}>
-          <Copy aria-hidden="true" className="h-5 w-5" />
           {copied ? 'Copied' : 'Copy diagnostics'}
         </Button>
         <Button type="button" onClick={() => void ensureRadio().then(refresh)}>Restart radio</Button>
-        <Button type="button" onClick={() => void requestMeshPermissions().then(refresh)}>Ask permissions</Button>
+        <Button type="button" onClick={() => void requestMeshPermissions().then(refresh)}>Permissions</Button>
         <Button type="button" onClick={() => void openAppSettings()}>Open settings</Button>
       </div>
     </section>

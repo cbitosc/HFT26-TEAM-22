@@ -1,11 +1,11 @@
 /** Shared Acknowledge / I'm on my way / Message buttons (src/ui/AlertActions.tsx): 2-column grid, equal height, 48 px minimum. */
 
-import { Check, MessageSquare, Navigation } from 'lucide-react';
+import { Check, MessageSquare } from 'lucide-react';
 import { useMeshStore } from '../store/useMeshStore';
 import type { StoredSOSAlert } from '../mesh/types';
 
 const base =
-  'flex min-h-12 w-full items-center justify-center gap-2 rounded-xl px-3 text-base font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus)]';
+  'flex min-h-12 w-full items-center justify-center gap-2 rounded-xl px-2 text-center text-base leading-tight font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus)]';
 
 export function AlertActions({ alert, onMessage }: { alert: StoredSOSAlert; onMessage: (senderId: string) => void }) {
   const respondToSOS = useMeshStore((s) => s.respondToSOS);
@@ -26,7 +26,6 @@ export function AlertActions({ alert, onMessage }: { alert: StoredSOSAlert; onMe
         disabled={alert.respondingByMe}
         className={`${base} ${alert.respondingByMe ? 'bg-[var(--safe-tint)] text-[var(--safe-ink)]' : 'bg-[var(--fg)] text-[var(--bg)]'}`}
       >
-        <Navigation aria-hidden="true" className="h-5 w-5 shrink-0" />
         {alert.respondingByMe ? 'On my way' : "I'm on my way"}
       </button>
       <button

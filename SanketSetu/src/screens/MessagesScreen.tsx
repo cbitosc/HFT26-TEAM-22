@@ -182,7 +182,7 @@ export function MessagesScreen() {
                 : 'No phones nearby yet. Messages wait here and send when a phone connects.'}
             </p>
           )}
-          <div className="flex min-h-[40vh] flex-col gap-3 pb-3">
+          <div className="flex min-h-[40vh] flex-col gap-3 pb-20">
             {thread.length === 0 ? (
               <Card className="flex flex-col items-center gap-3 px-5 py-8 text-center">
                 <p className="text-lg font-bold text-[var(--fg)]">
@@ -212,30 +212,33 @@ export function MessagesScreen() {
             <div ref={endRef} />
           </div>
 
+          {/* Fixed above the bottom nav (and the keyboard: the WebView resizes with it), so it is always visible. */}
           <form
             onSubmit={submit}
-            className="sticky z-20 -mx-4 border-t border-[var(--line)] bg-[var(--surface)] px-4 py-2"
+            className="fixed inset-x-0 z-30 border-t border-[var(--line)] bg-[var(--surface)]"
             style={{ bottom: 'calc(var(--nav-h) + var(--safe-bottom))' }}
           >
-            {sendError && <p role="alert" className="mb-2 text-sm font-semibold text-[var(--sos-ink)]">{sendError}</p>}
-            <div className="flex items-center gap-2">
-              <input
-                type="text"
-                maxLength={500}
-                value={draft}
-                onChange={(e) => setDraft(e.target.value)}
-                aria-label={tab === 'everyone' ? 'Message to everyone nearby' : `Private message to ${personName}`}
-                placeholder={tab === 'everyone' ? 'Message everyone nearby' : `Message ${personName}`}
-                className="min-h-12 min-w-0 flex-1 rounded-full border border-[var(--line)] bg-[var(--bg)] px-4 text-base text-[var(--fg)] focus:border-[var(--fg)] focus:outline-none"
-              />
-              <button
-                type="submit"
-                disabled={!draft.trim()}
-                aria-label="Send"
-                className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[var(--verified)] text-[var(--on-verified)] disabled:opacity-50"
-              >
-                <Send aria-hidden="true" className="h-5 w-5" />
-              </button>
+            <div className="mx-auto w-full max-w-lg px-4 py-2">
+              {sendError && <p role="alert" className="mb-2 text-sm font-semibold text-[var(--sos-ink)]">{sendError}</p>}
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  maxLength={500}
+                  value={draft}
+                  onChange={(e) => setDraft(e.target.value)}
+                  aria-label={tab === 'everyone' ? 'Message to everyone nearby' : `Private message to ${personName}`}
+                  placeholder={tab === 'everyone' ? 'Message everyone nearby' : `Message ${personName}`}
+                  className="min-h-12 min-w-0 flex-1 rounded-full border border-[var(--line)] bg-[var(--bg)] px-4 text-base text-[var(--fg)] focus:border-[var(--fg)] focus:outline-none"
+                />
+                <button
+                  type="submit"
+                  disabled={!draft.trim()}
+                  aria-label="Send"
+                  className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[var(--verified)] text-[var(--on-verified)] disabled:opacity-50"
+                >
+                  <Send aria-hidden="true" className="h-5 w-5" />
+                </button>
+              </div>
             </div>
           </form>
         </>
