@@ -45,9 +45,13 @@ When floods, earthquakes, cyclones, or infrastructure blackouts sever cellular t
 |  5. Store-and-Forward Outbox: 1s -> 30s exp backoff + SYNC_INV / SYNC_REQ sync    |
 |  6. Crypto (TweetNaCl): Ed25519 sigs + X25519/XSalsa20-Poly1305 E2E & Sealed GPS  |
 +-------------------+-------------------------------------------+-------------------+
-                    |                                           |
-      (Browser / Testbed Mode)                        (Native Android APK Mode)
-                    v                                           v
+                    |
+                    v
++-----------------------------------------------------------------------------------+
+|              CompositeTransport.ts (fans the engine out to every radio)           |
+|  Browser (no native bridge): SimTransport only (4-node demo chain)                |
+|  Native Android: NearbyTransport + SimTransport together — real nearby phones     |
+|  AND the seeded demo peers both show up as peers on the same running engine       |
 +---------------------------------------+   +---------------------------------------+
 |       SimTransport.ts (VIRTUAL)       |   |     NearbyTransport.ts (CAPACITOR)    |
 |  4-Node Chain (A <-> B <-> C <-> D)   |   |  Enforces MAX_CONCURRENT = 4 peers    |
@@ -59,8 +63,14 @@ When floods, earthquakes, cyclones, or infrastructure blackouts sever cellular t
                                             |   ANDROID NATIVE LAYER (Kotlin SDK)   |
                                             |  NearbyMeshPlugin.kt (P2P_CLUSTER)    |
                                             |  BLE + Bluetooth Classic + Wi-Fi Dir  |
+                                            |  Deterministic connect tie-break +    |
+                                            |  version-tagged endpoints             |
+                                            |  RelayCore.kt: header-only relay      |
+                                            |  (dedup + TTL decrement only, NOT     |
+                                            |  signature-verified) so forwarding    |
+                                            |  continues while the WebView is       |
+                                            |  throttled (screen off/backgrounded)  |
                                             |  MeshForegroundService.kt (WakeLock)  |
-                                            |  AndroidKeyStore AES-256-GCM Backing  |
                                             +---------------------------------------+
 ```
 
@@ -125,7 +135,7 @@ All cryptography runs 100% offline in TypeScript (`src/crypto/`) using audited *
 - **Emergency Broadcast Channel (`SOS`):** `XSalsa20-Poly1305` (`nacl.secretbox`) keyed with the SHA-512-derived 32-byte Emergency Channel / Circle key.
 - **Responder-Sealed Precise GPS (`src/crypto/sealedLocation.ts`):** When a survivor sends an SOS with precise location enabled, exact GPS coordinates (`lat, lng, accuracy, altitude`) are sealed via `nacl.box` (`X25519-XSalsa20-Poly1305`) to the **Responder Group X25519 public key**, while only coarse (`~1 km`) coordinates appear in the general broadcast cleartext.
 - **Verified Responder Certificates (`src/crypto/responderCert.ts`):** Offline `Ed25519` certificates signed by the `DEMO AUTHORITY` root key bind a responder's `nodeId`, `signPub`, `role` (`NDRF_MEDIC`, `FIRE_RESCUE`, `CIVIL_DEFENSE`, `POLICE`), and expiry timestamp.
-- **Key Storage at Rest:** On Android, `NearbyMeshPlugin.ensureHardwareKeyBacked()` provisions an `AES-256-GCM` master key inside the hardware-backed `AndroidKeyStore`; in browser/fallback mode, private keys are encrypted at rest using a PIN-derived `XSalsa20-Poly1305` (`nacl.secretbox`) vault (`src/crypto/identity.ts`).
+- **Key Storage at Rest (`src/crypto/identity.ts`):** The Ed25519/X25519 secret keys are never stored in plaintext. They are split from the public identity fields and persisted encrypted (`nacl.secretbox`) under a random 256-bit per-install local vault key (`db/dexie.ts: getOrCreateLocalVaultKey`). This protects against accidental plaintext exposure (exports, screenshots, casual DB inspection) but — like any key stored alongside its own ciphertext on the same device — does **not** protect against an attacker with full local filesystem/IndexedDB access; there is no PIN-unlock screen gating app launch yet, so the optional onboarding PIN currently only encrypts a separate, not-yet-wired-up portable backup blob. `NearbyMeshPlugin.ensureHardwareKeyBacked()` provisions an `AES-256-GCM` key in the hardware-backed `AndroidKeyStore`, but it is not yet used to wrap the identity vault — wiring that up is the natural next hardening step. See `docs/SECURITY.md` for the full threat model.
 
 ### Threat Model & Limits
 1. **Bundled Emergency Channel Key:** The default public emergency channel key (`SANKET-SETU-DEFAULT-EMERGENCY-CHANNEL-KEY-V1`) is shared across all nodes so any nearby civilian phone can display coarse SOS alerts. It **only stops casual passive snooping** by non-protocol listeners. For confidential group broadcasts, users can configure a custom secret key or scan a Family Circle QR code.
@@ -139,7 +149,9 @@ All cryptography runs 100% offline in TypeScript (`src/crypto/`) using audited *
 1. **Concurrent Connection Cap (`3–5` Peers per Device):** Google Nearby Connections (`Strategy.P2P_CLUSTER` over Bluetooth + BLE + Wi-Fi Direct) reliably sustains `3–5` simultaneous bidirectional socket connections per Android handset. `NearbyMeshPlugin.kt` and `NearbyTransport.ts` explicitly enforce `MAX_CONCURRENT_CONNECTIONS = 4`, automatically rotating out the oldest idle neighbor when a 5th peer connects and logging a `fanOutLimit` event. Multi-hop store-and-forward and `SYNC_INV` epidemic sync bridge larger clusters across time.
 2. **Soft Real-Time Store-and-Forward:** Because packets experience per-hop jitter (`10–50 ms`), radio switching overhead, and intermittent neighbor disconnects, Sanket Setu is a **soft real-time delay-tolerant mesh**, not a synchronous voice/video link.
 3. **Battery vs. Connectivity Trade-Off:** Continuous `P2P_CLUSTER` scanning (`Active` 100% duty cycle) consumes more battery than `Balanced` (`10s scan / 20s sleep`, 33% duty) or `Emergency Saver` (`5s scan / 45s sleep`, 10% duty, relays only `P0/P1`). At `≤ 5%` battery, Sanket Setu emits a final **Last-Gasp SOS** and enters `Emergency Saver`.
-4. **Android + Google Play Services Requirement:** Native physical-radio mesh transport requires Android 8.0+ (API 26+, Android 12+ nearby permissions) with Google Play Services (`play-services-nearby:19.3.0`). Browser mode uses the deterministic in-memory `SimTransport` virtual mesh.
+4. **Android + Google Play Services Requirement:** Native physical-radio mesh transport requires Android 8.0+ (API 26+, Android 12+ nearby permissions) with Google Play Services (`play-services-nearby:19.3.0`). Browser mode uses the deterministic in-memory `SimTransport` virtual mesh. iOS is out of scope (Nearby Connections is Android/Play-Services-only).
+5. **Native relay forwards unverified packets:** `RelayCore.kt`'s header-only relay (see architecture diagram) does not check Ed25519 signatures — it only reads `id`/`ttl`/`hops` to dedup and forward. It exists so the mesh keeps relaying other nodes' traffic while the WebView is throttled; the TypeScript `MeshEngine` remains the sole authority for signature verification, decryption, and all UI/delivery state, which it performs independently on every payload regardless of what RelayCore does. The practical consequence: a malicious peer can burn nearby devices' radio/battery with fabricated packets without a valid signature, bounded only by TTL and the dedup cache, not by any trust check at that layer. Full threat model in `docs/SECURITY.md`.
+6. **Identity vault is device-local, not PIN-gated:** see "Key Storage at Rest" above — the running app currently auto-unlocks via a local vault key rather than requiring the onboarding PIN on each launch.
 
 ---
 
@@ -168,12 +180,50 @@ npm run dev
 ```
 Opens on `http://localhost:3000`. Works 100% offline after load.
 
-### Build & Run on Physical Android Devices (Capacitor 6)
+### Build & Run on Physical Android Devices (Capacitor 8)
+
+The `android/` Capacitor platform is committed to this repo (`npx cap add android` has
+already been run), with the native mesh plugin (`plugins/nearby-mesh/android/`) wired in
+as a Gradle library module the app depends on — you do not need to recreate either.
+
+**JDK requirement:** `@capacitor/android` 8.6's own Gradle module targets Java 21 bytecode,
+so building needs a **JDK 21** on `JAVA_HOME` (not whatever `java -version` on your PATH
+happens to be — JDK 11/17 fail with "invalid source release: 21", and JDK 25/26 fail
+Gradle itself with "Unsupported class file major version"). If you don't already have one:
 ```bash
-npm run build
-npx cap sync android
-npx cap run android
+brew install openjdk@21
 ```
+
+**Option A — Android Studio (recommended for first-time setup/testing):**
+1. Open Android Studio → **Open** → select the `SanketSetu/android` folder (not `SanketSetu/`
+   itself — that's the web project root, `android/` is the native platform).
+2. If prompted to upgrade the Gradle wrapper, **decline** — this project is pinned to
+   Gradle 8.14.3 + AGP 8.13.0, which is what's been verified to build.
+3. Settings → Build, Execution, Deployment → Build Tools → Gradle → **Gradle JDK**: pick a
+   JDK 21 (e.g. the `openjdk@21` installed above, or "Download JDK..." → 21 → Eclipse Temurin).
+4. Let Gradle sync, then Run ▶ on a connected device or emulator (minSdk 26 / Android 8.0+).
+
+**Option B — command line:**
+```bash
+npm install
+npm run build              # builds dist/ from the web app
+npx cap sync android       # copies dist/ + plugin config into android/
+cd android
+JAVA_HOME="$(brew --prefix openjdk@21)" ANDROID_HOME="$HOME/Library/Android/sdk" \
+  ./gradlew assembleDebug  # -> android/app/build/outputs/apk/debug/app-debug.apk
+# install on a connected/USB-debugging device:
+JAVA_HOME="$(brew --prefix openjdk@21)" ANDROID_HOME="$HOME/Library/Android/sdk" \
+  ./gradlew installDebug
+```
+
+After editing any TypeScript/React source, re-run `npm run build && npx cap sync android`
+before rebuilding the APK — the native project only ever sees what's in `dist/`, it doesn't
+watch `src/`.
+
+**Testing real mesh behavior needs two physical Android phones** (an emulator can't exercise
+Bluetooth/Wi-Fi Direct radios against a second device) with Bluetooth and Wi-Fi left on. See
+`docs/HARDWARE_TEST_CHECKLIST.md` for the exact test matrix — everything on it is marked
+UNVERIFIED until a human runs it on real hardware.
 
 ---
 
