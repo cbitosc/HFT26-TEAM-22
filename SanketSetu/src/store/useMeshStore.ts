@@ -40,6 +40,7 @@ import {
   ResponderCertificate,
   verifyResponderCertificate,
 } from '../crypto/responderCert';
+import { Capacitor } from '@capacitor/core';
 import {
   SimLinkState,
   SimLinkTransmissionEvent,
@@ -48,6 +49,8 @@ import {
   SimTransport,
 } from '../transport/SimTransport';
 import { NearbyTransport } from '../transport/NearbyTransport';
+import { CompositeTransport } from '../transport/CompositeTransport';
+import { Transport } from '../transport/Transport';
 import { MeshEngine, PacketDropLogEntry } from '../mesh/engine';
 import {
   CongestionBenchmarkSummary,
@@ -424,9 +427,22 @@ async function setupDefaultFourNodeChain(
     300
   );
 
+  // On a real Android device, the engine talks over BOTH the real Nearby Connections radio
+  // AND the in-memory demo mesh (so the seeded demo peers below are always visible for judging
+  // even without a second phone in range, while real nearby phones also show up as real peers).
+  // In the browser (no native bridge), it's SimTransport only — NearbyTransport.start() would
+  // just throw internally and do nothing, so there's no point including it there.
+  let engineTransport: Transport = userSimTransport;
+  if (Capacitor.isNativePlatform()) {
+    nativeNearbyTransport = new NearbyTransport(userIdentity.displayName);
+    engineTransport = new CompositeTransport([nativeNearbyTransport, userSimTransport]);
+  } else {
+    nativeNearbyTransport = null;
+  }
+
   localEngine = new MeshEngine({
     identity: userIdentity,
-    transport: userSimTransport,
+    transport: engineTransport,
     responderCert: get().myResponderCert,
     relayJitterMs: 15,
   });
@@ -437,10 +453,6 @@ async function setupDefaultFourNodeChain(
   localEngine.seenCache.setPersistCallback((row) => {
     void persistSeenEntry(row);
   });
-
-  // Also start Native NearbyTransport in parallel if running on Android Capacitor
-  nativeNearbyTransport = new NearbyTransport(userIdentity.displayName);
-  void nativeNearbyTransport.start();
 
   const virtualSpecs = [
     { name: 'RELAY-B (North Ridge)', x: 360, y: 220, battery: 82, isVerifiedMedic: false },

@@ -23,6 +23,7 @@ import { SeenCache } from '../src/mesh/seenCache';
 import { MeshPriorityQueue } from '../src/mesh/priority';
 import { computePowerSchedule, resolveAutoPowerMode } from '../src/mesh/power';
 import { LoopbackHub, LoopbackTransport } from '../src/transport/LoopbackTransport';
+import { CompositeTransport } from '../src/transport/CompositeTransport';
 import { MeshEngine } from '../src/mesh/engine';
 import { MeshPacket } from '../src/mesh/types';
 
@@ -955,5 +956,56 @@ test('16. Identity Vault: secret keys never leave storage in plaintext, round-tr
   // A different vault key must fail to open it.
   const wrongKey = generateVaultKeyB64();
   assert.equal(decryptSecretKeysWithVaultKey(encrypted, wrongKey), null);
+});
+
+test('17. CompositeTransport: merges peers and packets from multiple underlying radios and routes sends to the right one', async () => {
+  const hubA = new LoopbackHub();
+  const hubB = new LoopbackHub();
+
+  const localOnA = new LoopbackTransport('LOCAL', 'Local Node', hubA);
+  const localOnB = new LoopbackTransport('LOCAL', 'Local Node', hubB);
+  const peerX = new LoopbackTransport('PEER-X', 'Peer X', hubA);
+  const peerY = new LoopbackTransport('PEER-Y', 'Peer Y', hubB);
+
+  const composite = new CompositeTransport([localOnA, localOnB]);
+
+  const receivedByComposite: Array<{ from: string; text: string }> = [];
+  composite.onPacket((from, bytes) => {
+    receivedByComposite.push({ from, text: Buffer.from(bytes).toString('utf8') });
+  });
+
+  await peerX.start();
+  await peerY.start();
+  await composite.start();
+
+  await hubA.connect('LOCAL', 'PEER-X');
+  await hubB.connect('LOCAL', 'PEER-Y');
+
+  const peerIds = composite.getPeers().map((p) => p.peerId).sort();
+  assert.deepEqual(peerIds, ['PEER-X', 'PEER-Y']);
+
+  // Sending to PEER-X must arrive on hubA's peerX, not hubB.
+  const receivedByX: string[] = [];
+  peerX.onPacket((from, bytes) => {
+    receivedByX.push(Buffer.from(bytes).toString('utf8'));
+  });
+  const sentToX = await composite.send('PEER-X', Buffer.from('hello-x', 'utf8'));
+  assert.equal(sentToX, true);
+  assert.deepEqual(receivedByX, ['hello-x']);
+
+  // Sending to PEER-Y must arrive on hubB's peerY.
+  const receivedByY: string[] = [];
+  peerY.onPacket((from, bytes) => {
+    receivedByY.push(Buffer.from(bytes).toString('utf8'));
+  });
+  const sentToY = await composite.send('PEER-Y', Buffer.from('hello-y', 'utf8'));
+  assert.equal(sentToY, true);
+  assert.deepEqual(receivedByY, ['hello-y']);
+
+  // A packet arriving on either sub-transport is forwarded through the composite's onPacket.
+  await hubA.deliver('PEER-X', 'LOCAL', Buffer.from('from-x', 'utf8'));
+  assert.deepEqual(receivedByComposite.map((r) => r.from), ['PEER-X']);
+
+  await composite.stop();
 });
 
