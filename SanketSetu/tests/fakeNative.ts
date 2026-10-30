@@ -82,6 +82,7 @@ export class FakeBridge implements NearbyMeshPluginInterface {
     return this.checkMeshPermissions();
   }
   async openAppSettings() {}
+  async showAlertNotification() {}
   async setPowerMode(o: { mode: string }) {
     return o;
   }

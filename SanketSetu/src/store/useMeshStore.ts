@@ -56,6 +56,7 @@ import {
   NearbyTransport,
   type RadioDiagnostics,
 } from '../transport/NearbyTransport';
+import { alertIncoming } from '../lib/alertFeedback';
 import { NullTransport } from '../transport/NullTransport';
 import {
   buildDemoWorld,
@@ -143,6 +144,10 @@ export interface MeshStoreState {
   meshQuality: MeshQualitySnapshot;
   dropLog: PacketDropLogEntry[];
   activeSosId: string | null;
+  /** SOS id shown in the full-screen incoming-alert card, or null. */
+  incomingAlertId: string | null;
+  /** Alert ids the user has seen (opened Alerts or dismissed the card); drives the unread badge. */
+  seenAlertIds: string[];
 
   // Selected conversation & Inspector state
   activeConversationId: string | null;
@@ -201,6 +206,8 @@ export interface MeshStoreState {
     isLastGasp?: boolean;
   }) => Promise<StoredSOSAlert>;
   cancelActiveSOS: () => void;
+  dismissIncomingAlert: () => void;
+  markAlertsSeen: () => void;
   respondToSOS: (
     alertId: string,
     mode: 'RELAY_RECEIPT' | 'SOS_RESPONDING',
@@ -684,6 +691,12 @@ async function setupMesh(
   localEngine.onStateChange(() => {
     scheduleThrottledSync(set, get);
   });
+  localEngine.onIncomingAlert((alert) => {
+    // Only a signed, verified, newly received SOS reaches here (the engine drops everything else).
+    alertIncoming(alert);
+    set({ incomingAlertId: alert.id });
+    syncStoreFromEngine(set, get);
+  });
 
   await localEngine.start();
   for (const v of virtuals) await v.engine.start();
@@ -845,6 +858,8 @@ export const useMeshStore = create<MeshStoreState>((set, get) => ({
   },
   dropLog: [],
   activeSosId: null,
+  incomingAlertId: null,
+  seenAlertIds: [],
 
   activeConversationId: null,
   inspectedMessageId: null,
@@ -1248,6 +1263,24 @@ export const useMeshStore = create<MeshStoreState>((set, get) => ({
     set({ activeSosId: alert.id, inspectedMessageId: alert.id });
     syncStoreFromEngine(set, get);
     return alert;
+  },
+
+  dismissIncomingAlert: () => {
+    const id = get().incomingAlertId;
+    if (!id) return;
+    set({ incomingAlertId: null, seenAlertIds: [...get().seenAlertIds, id] });
+  },
+
+  markAlertsSeen: () => {
+    const seen = new Set(get().seenAlertIds);
+    let changed = false;
+    for (const a of get().alerts) {
+      if (!seen.has(a.id)) {
+        seen.add(a.id);
+        changed = true;
+      }
+    }
+    if (changed) set({ seenAlertIds: [...seen] });
   },
 
   cancelActiveSOS: () => {

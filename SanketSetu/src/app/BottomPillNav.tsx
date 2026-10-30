@@ -83,8 +83,9 @@ function NavItem({
 
 export function BottomPillNav({ activeScreen, onNavigate }: BottomPillNavProps) {
   const [moreOpen, setMoreOpen] = useState(false);
+  // Unread = alerts received from other phones that this user has not opened or acknowledged.
   const unreadAlerts = useMeshStore(
-    (s) => s.alerts.filter((a) => !a.acknowledgedByMe).length
+    (s) => s.alerts.filter((a) => a.senderId !== s.identity.nodeId && !a.acknowledgedByMe && !s.seenAlertIds.includes(a.id)).length
   );
   const sosActive = useMeshStore((s) => s.activeSosId !== null);
   const appMode = useMeshStore((s) => s.appMode);

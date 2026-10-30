@@ -106,6 +106,8 @@ export interface NearbyMeshPluginInterface {
   checkMeshPermissions(): Promise<MeshPermissionState>;
   requestMeshPermissions(): Promise<MeshPermissionState>;
   openAppSettings(): Promise<void>;
+  /** Posts or updates the high-priority emergency notification for an alert. */
+  showAlertNotification(options: { id: string; title: string; body: string }): Promise<void>;
   setPowerMode(options: { mode: string }): Promise<{ mode: string }>;
   addListener(
     eventName: 'permissionState',

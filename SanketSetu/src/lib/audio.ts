@@ -88,6 +88,28 @@ class ToneEngine {
     this.playTick(540, 0.055);
   }
 
+  /** Loud two-tone alarm for an incoming SOS. Deliberately ignores the mute setting. */
+  public playIncomingAlarm() {
+    const ctx = this.ensureContext();
+    if (!ctx) return;
+    for (let i = 0; i < 6; i += 1) {
+      const t = ctx.currentTime + i * 0.35;
+      for (const [offset, freq] of [[0, 960], [0.17, 720]] as const) {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(freq, t + offset);
+        gain.gain.setValueAtTime(0.0001, t + offset);
+        gain.gain.exponentialRampToValueAtTime(0.18, t + offset + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.0001, t + offset + 0.16);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(t + offset);
+        osc.stop(t + offset + 0.17);
+      }
+    }
+  }
+
   /** Distinct three-tone confirmation used when an SOS is actually sent. */
   public playSosSent() {
     this.playTick(880, 0.12);

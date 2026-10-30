@@ -115,6 +115,38 @@ class NearbyMeshPlugin : Plugin(), ConnectionManager.Listener {
     private val dialing = ConcurrentHashMap.newKeySet<String>()
     private val connectAttempts = ConcurrentHashMap<String, Int>()
 
+    /** True while the activity is resumed; native notifications are only needed when it is not. */
+    @Volatile
+    private var appInForeground = true
+
+    override fun handleOnResume() {
+        super.handleOnResume()
+        appInForeground = true
+    }
+
+    override fun handleOnPause() {
+        super.handleOnPause()
+        appInForeground = false
+    }
+
+    /**
+     * Header-only look at a received packet: if it is a new SOS from another phone and the app is
+     * not on screen, post the generic emergency notification right away. The engine later updates
+     * the same notification with details once it has verified and decrypted the alert.
+     */
+    private fun maybeNotifyHeaderOnly(bytes: ByteArray) {
+        if (appInForeground) return
+        try {
+            val json = org.json.JSONObject(String(bytes, Charsets.UTF_8))
+            if (json.optString("type") != "SOS") return
+            val id = json.optString("id")
+            if (id.isEmpty() || json.optString("src") == localNodeId) return
+            AlertNotifier.notifyHeaderOnly(context, id)
+        } catch (e: Exception) {
+            // not JSON or malformed: the engine will reject it
+        }
+    }
+
     override fun load() {
         super.load()
         connectionsClient = Nearby.getConnectionsClient(context)
@@ -164,6 +196,7 @@ class NearbyMeshPlugin : Plugin(), ConnectionManager.Listener {
 
             // Header-only native relay: keeps packets moving even if the WebView is throttled.
             relayCore.offer(endpointId, bytes, connectionManager.connectedPeers.keys)
+            maybeNotifyHeaderOnly(bytes)
 
             enqueuePendingPayload(endpointId, nodeId, bytes)
 
@@ -564,6 +597,19 @@ class NearbyMeshPlugin : Plugin(), ConnectionManager.Listener {
     }
 
     // --- Diagnostics -----------------------------------------------------------------------
+
+    /** Posts or updates the high-priority notification for an alert the engine has verified. */
+    @PluginMethod
+    fun showAlertNotification(call: PluginCall) {
+        val id = call.getString("id") ?: return call.reject("id required")
+        AlertNotifier.notify(
+            context,
+            id,
+            call.getString("title") ?: "Emergency alert nearby",
+            call.getString("body") ?: "Open Sanket Setu."
+        )
+        call.resolve()
+    }
 
     @PluginMethod
     fun getDiagnostics(call: PluginCall) {

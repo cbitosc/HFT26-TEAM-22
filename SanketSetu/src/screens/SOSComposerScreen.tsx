@@ -1,6 +1,6 @@
 import { Pictogram, pictogramFor } from '../ui/Pictogram';
 import { useMemo, useState } from 'react';
-import { Check, ChevronRight, Languages, MapPin, ShieldAlert, ShieldCheck } from 'lucide-react';
+import { Check, ChevronRight, Clock, Languages, MapPin, Radio, ShieldCheck } from 'lucide-react';
 import {
   AppScreenId,
   PictogramLanguage,
@@ -21,9 +21,14 @@ const languageNames: Record<PictogramLanguage, string> = {
 };
 const locationOptions: { value: LocationPrecision; label: string }[] = [
   { value: 'disabled', label: 'None' },
-  { value: 'coarse', label: 'Coarse' },
+  { value: 'coarse', label: 'Approximate' },
   { value: 'precise', label: 'Precise, sealed' },
 ];
+const locationHelp: Record<LocationPrecision, string> = {
+  disabled: 'No location is sent.',
+  coarse: 'Shares your area to within about 1 km.',
+  precise: 'Shares an approximate area. Your exact position is sealed so only verified responders can read it.',
+};
 
 export function SOSComposerScreen({ onNavigate }: SOSComposerScreenProps) {
   const broadcastSOS = useMeshStore((s) => s.broadcastSOS);
@@ -31,40 +36,38 @@ export function SOSComposerScreen({ onNavigate }: SOSComposerScreenProps) {
   const activeSosId = useMeshStore((s) => s.activeSosId);
   const cancelActiveSOS = useMeshStore((s) => s.cancelActiveSOS);
   const locationOptIn = useMeshStore((s) => s.locationOptIn);
-  const simulatedLat = useMeshStore((s) => s.simulatedLat);
-  const simulatedLng = useMeshStore((s) => s.simulatedLng);
+  const lastSosLocationNote = useMeshStore((s) => s.lastSosLocationNote);
+  const phonesNearby = useMeshStore((s) => s.peers.filter((p) => p.isDirectNeighbor).length);
 
   const [selectedPictogramId, setSelectedPictogramId] = useState('medical_trauma');
   const [pictoLang, setPictoLang] = useState<PictogramLanguage>('English');
   const [locPrecision, setLocPrecision] = useState<LocationPrecision>(locationOptIn);
+  const [extraText, setExtraText] = useState('');
 
   const selectedPictogram = useMemo(
     () => QUICK_SOS_PICTOGRAMS.find((p) => p.id === selectedPictogramId) ?? QUICK_SOS_PICTOGRAMS[0],
     [selectedPictogramId],
   );
-  const trackedSos = alerts.find((a) => a.id === activeSosId) ?? alerts[0] ?? null;
+  // Only the SOS this phone sent and is still tracking. Never fall back to someone else's alert.
+  const trackedSos = alerts.find((a) => a.id === activeSosId) ?? null;
   const responderAcks = trackedSos?.responderAcks ?? [];
   const reachedCount = trackedSos?.reachedNodeIds.length ?? 0;
-  const acknowledged = responderAcks.length > 0;
-  const enRoute = responderAcks.find((r) => r.status === 'RESPONDING');
+  const firstAck = responderAcks[0];
+  const verifiedAck = responderAcks.find((r) => r.verifiedCert);
+  const onTheWay = responderAcks.find((r) => r.verifiedCert && r.status === 'RESPONDING');
 
   const sendSos = async () => {
     soundEngine.playSosSent();
+    const extra = extraText.trim();
     await broadcastSOS({
       category: selectedPictogram.category,
-      text: selectedPictogram.localized[pictoLang].template,
+      text: extra ? `${selectedPictogram.localized[pictoLang].template} ${extra}` : selectedPictogram.localized[pictoLang].template,
       headcount: 2,
       locationPrecision: locPrecision,
       pictogramId: selectedPictogram.id,
     });
+    setExtraText('');
   };
-
-  const stages = [
-    { label: 'Broadcast', detail: trackedSos ? 'SOS sent to nearby peers' : 'Waiting to send', done: !!trackedSos },
-    { label: `Reached ${reachedCount}`, detail: reachedCount ? 'Peers reported receipt' : 'No peer receipt yet', done: reachedCount > 0 },
-    { label: 'Acknowledged', detail: acknowledged ? 'Responder acknowledgement received' : 'Waiting for a responder', done: acknowledged },
-    { label: 'Responder en route', detail: enRoute ? `${enRoute.responderName} · ${enRoute.hops} hops` : 'Waiting for dispatch', done: !!enRoute },
-  ];
 
   return (
     <section className="mx-auto w-full max-w-xl px-4 pt-3 pb-8 sm:px-6">
@@ -107,6 +110,18 @@ export function SOSComposerScreen({ onNavigate }: SOSComposerScreenProps) {
         })}
       </div>
 
+      <label className="mt-5 block">
+        <span className="mb-2 block text-lg font-bold text-[var(--fg)]">Add a message <span className="text-base font-normal text-[var(--fg-secondary)]">(optional)</span></span>
+        <textarea
+          value={extraText}
+          onChange={(e) => setExtraText(e.target.value)}
+          maxLength={200}
+          rows={2}
+          placeholder="For example: second floor, two people"
+          className="min-h-12 w-full rounded-xl border border-[var(--line)] bg-[var(--surface)] px-3 py-2 text-base text-[var(--fg)] focus:border-[var(--fg)] focus:outline-none"
+        />
+      </label>
+
       <div className="mt-5">
         <h2 className="mb-2 flex items-center gap-2 text-lg font-bold text-[var(--fg)]">
           <MapPin aria-hidden="true" className="h-5 w-5" /> Location
@@ -122,13 +137,7 @@ export function SOSComposerScreen({ onNavigate }: SOSComposerScreenProps) {
             >{label}</button>
           ))}
         </div>
-        {locPrecision !== 'disabled' && (
-          <p className="mt-2 text-sm text-[var(--fg-secondary)]">
-            {locPrecision === 'coarse'
-              ? `Approximate area: ${simulatedLat.toFixed(2)}, ${simulatedLng.toFixed(2)}`
-              : 'Approximate area is shared; precise coordinates are sealed for a trusted responder.'}
-          </p>
-        )}
+        <p className="mt-2 text-sm text-[var(--fg-secondary)]">{locationHelp[locPrecision]}</p>
       </div>
 
       <div className="my-6 flex justify-center">
@@ -142,34 +151,45 @@ export function SOSComposerScreen({ onNavigate }: SOSComposerScreenProps) {
         >Cancel active SOS <ChevronRight aria-hidden="true" className="h-4 w-4 rotate-180" /></button>
       )}
 
-      <section aria-labelledby="sos-progress-title" className="rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-4">
-        <h2 id="sos-progress-title" className="mb-3 text-lg font-bold text-[var(--fg)]">SOS progress</h2>
-        <ol className="space-y-4">
-          {stages.map((stage, index) => (
-            <li key={stage.label} className="flex items-start gap-3">
-              <span className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border text-sm font-bold ${stage.done ? 'border-[var(--safe)] bg-[var(--safe-tint)] text-[var(--safe-ink)]' : 'border-[var(--line)] bg-[var(--surface-2)] text-[var(--fg-secondary)]'}`} aria-label={stage.done ? 'Complete' : 'Pending'}>
-                {stage.done ? <Check aria-hidden="true" className="h-4 w-4" /> : index + 1}
-              </span>
-              <div className="min-w-0 flex-1">
-                <div className="font-semibold text-[var(--fg)]">{stage.label}</div>
-                <div className="text-sm text-[var(--fg-secondary)]">{stage.detail}</div>
-              </div>
-              <span className="pt-1 text-sm font-medium text-[var(--fg-secondary)]">{stage.done ? 'Done' : 'Waiting'}</span>
+      {trackedSos && (
+        <section aria-labelledby="sos-status-title" className="rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-4">
+          <h2 id="sos-status-title" className="mb-3 text-lg font-bold text-[var(--fg)]">Your SOS</h2>
+          <ul className="flex flex-col gap-3">
+            <li className="flex items-center gap-3 text-base font-semibold text-[var(--fg)]">
+              <Radio aria-hidden="true" className="h-5 w-5 shrink-0 text-[var(--verified-ink)]" />
+              Broadcasting
             </li>
-          ))}
-        </ol>
-        {responderAcks.map((ack) => (
-          <div key={ack.ackPacketId} className="mt-4 flex flex-wrap items-center gap-2 border-t border-[var(--line)] pt-3 text-sm">
-            <span className="font-semibold text-[var(--fg)]">{ack.responderName}</span>
-            {ack.verifiedCert ? (
-              <span className="inline-flex items-center gap-1 rounded-full bg-[var(--verified-tint)] px-2.5 py-1 font-semibold text-[var(--verified)]"><ShieldCheck aria-hidden="true" className="h-4 w-4" /> Verified responder</span>
-            ) : (
-              <span className="inline-flex items-center gap-1 rounded-full bg-[var(--warning-tint)] px-2.5 py-1 font-semibold text-[var(--warning)]"><ShieldAlert aria-hidden="true" className="h-4 w-4" /> Unverified responder</span>
+            <li className="flex items-center gap-3 text-base font-semibold text-[var(--fg)]">
+              {reachedCount > 0 ? <Check aria-hidden="true" className="h-5 w-5 shrink-0 text-[var(--safe-ink)]" /> : <Clock aria-hidden="true" className="h-5 w-5 shrink-0 text-[var(--fg-secondary)]" />}
+              Reached {reachedCount} {reachedCount === 1 ? 'phone' : 'phones'}
+            </li>
+            {firstAck && (
+              <li className="flex items-center gap-3 text-base font-semibold text-[var(--fg)]">
+                <Check aria-hidden="true" className="h-5 w-5 shrink-0 text-[var(--safe-ink)]" />
+                <span className="min-w-0 break-words">Acknowledged by {firstAck.responderName}</span>
+              </li>
             )}
-            <span className="text-[var(--fg-secondary)]">{ack.status} · {ack.hops} hops</span>
-          </div>
-        ))}
-      </section>
+            {onTheWay && (
+              <li className="flex items-center gap-3 text-base font-semibold text-[var(--fg)]">
+                <ShieldCheck aria-hidden="true" className="h-5 w-5 shrink-0 text-[var(--verified-ink)]" />
+                <span className="min-w-0 break-words">Responder on the way: {onTheWay.responderName}</span>
+              </li>
+            )}
+            {verifiedAck && !onTheWay && (
+              <li className="flex items-center gap-3 text-base font-semibold text-[var(--fg)]">
+                <ShieldCheck aria-hidden="true" className="h-5 w-5 shrink-0 text-[var(--verified-ink)]" />
+                <span className="min-w-0 break-words">Verified responder: {verifiedAck.responderName}</span>
+              </li>
+            )}
+          </ul>
+          {phonesNearby === 0 && !firstAck && (
+            <p role="status" className="mt-3 rounded-xl bg-[var(--warn-tint)] px-3 py-2 text-base text-[var(--warn-ink)]">
+              No phones nearby. Your SOS is saved and will send the moment a phone connects.
+            </p>
+          )}
+          {lastSosLocationNote && <p className="mt-3 text-sm text-[var(--fg-secondary)]">{lastSosLocationNote}</p>}
+        </section>
+      )}
 
       <button type="button" onClick={() => onNavigate('alerts')} className="mt-4 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl text-base font-semibold text-[var(--verified)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--verified)]">
         View alerts <ChevronRight aria-hidden="true" className="h-4 w-4" />

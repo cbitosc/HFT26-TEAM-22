@@ -4,6 +4,7 @@
  */
 
 import { Suspense, lazy, useEffect, useState } from 'react';
+import { IncomingAlertOverlay } from './ui/IncomingAlertOverlay';
 import { AppScreenId, MOBILE_TABS } from './content';
 import { useReducedMotion } from './hooks/useReducedMotion';
 import { Skeleton } from './ui/Skeleton';
@@ -243,6 +244,7 @@ export default function App() {
       </main>
 
       <BottomPillNav activeScreen={activeScreen} onNavigate={handleNavigate} />
+      <IncomingAlertOverlay onNavigate={handleNavigate} />
     </div>
   );
 }
