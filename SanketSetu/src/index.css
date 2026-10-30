@@ -87,7 +87,21 @@
   font-family: var(--font-ui);
 }
 
+/* Legacy mono utilities were overused for ordinary labels; reserve monospace for data blocks. */
+.font-mono {
+  font-family: var(--font-ui) !important;
+}
+
+pre,
+code,
+kbd,
+samp {
+  font-family: var(--font-mono) !important;
+}
+
 /* Prevent tiny metadata utilities from shrinking below a readable caption size. */
+[class~="text-[8px]"],
+[class~="text-[9px]"],
 [class~="text-[10px]"],
 [class~="text-[11px]"] {
   font-size: 0.75rem !important;
