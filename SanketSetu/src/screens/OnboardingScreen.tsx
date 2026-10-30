@@ -76,7 +76,7 @@ export function OnboardingScreen({ onCompleteNavigate }: OnboardingScreenProps) 
         displayName: name,
         pin: skipPin ? undefined : pin,
         language,
-        powerMode: 'balanced',
+        powerMode: 'active',
       });
       onCompleteNavigate('home');
     } catch (e) {

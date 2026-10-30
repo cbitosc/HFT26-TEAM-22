@@ -49,6 +49,9 @@ const AIAssistantScreen = lazy(() =>
 const MeshQualityScreen = lazy(() =>
   import('./screens/MeshQualityScreen').then((m) => ({ default: m.MeshQualityScreen }))
 );
+const RadioDiagnosticsScreen = lazy(() =>
+  import('./screens/RadioDiagnosticsScreen').then((m) => ({ default: m.RadioDiagnosticsScreen }))
+);
 const SettingsScreen = lazy(() =>
   import('./screens/SettingsScreen').then((m) => ({ default: m.SettingsScreen }))
 );
@@ -76,6 +79,7 @@ function resolveScreenFromHash(hash: string): AppScreenId | null {
     'ai',
     'simulator',
     'quality',
+    'diagnostics',
     'settings',
     'onboarding',
   ];
@@ -232,6 +236,7 @@ export default function App() {
           {activeScreen === 'simulator' &&
             (appMode === 'demo' ? <SimulatorScreen /> : <DemoGate what="The simulator" />)}
           {activeScreen === 'quality' && <MeshQualityScreen />}
+          {activeScreen === 'diagnostics' && <RadioDiagnosticsScreen />}
           {activeScreen === 'ai' && <AIAssistantScreen />}
           {activeScreen === 'settings' && <SettingsScreen />}
         </Suspense>

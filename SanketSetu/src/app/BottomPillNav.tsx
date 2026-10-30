@@ -17,6 +17,7 @@ import {
   Home,
   Map as MapIcon,
   Menu,
+  Radio,
   MessageSquare,
   Settings,
   ShieldCheck,
@@ -31,11 +32,12 @@ interface BottomPillNavProps {
   onNavigate: (screen: AppScreenId) => void;
 }
 
-const MORE_ITEMS: { id: AppScreenId; label: string; hint: string; icon: LucideIcon }[] = [
+const MORE_ITEMS: { id: AppScreenId; label: string; hint: string; icon: LucideIcon; realOnly?: boolean }[] = [
   { id: 'circles', label: 'Safety circles', hint: 'Check in with family and groups', icon: HeartHandshake },
-  { id: 'map', label: 'Mesh map', hint: 'Nearby nodes and hazards (simulated)', icon: MapIcon },
+  { id: 'map', label: 'Mesh map', hint: 'Phones and hazards near you', icon: MapIcon },
   { id: 'simulator', label: 'Simulator', hint: 'Test the mesh without phones', icon: Cpu },
   { id: 'quality', label: 'Mesh quality', hint: 'Latency, delivery and drops, measured', icon: Gauge },
+  { id: 'diagnostics', label: 'Radio diagnostics', hint: 'Why phones are or are not connecting', icon: Radio, realOnly: true },
   { id: 'ai', label: 'AI assistant', hint: 'Optional, online only', icon: Bot },
   { id: 'settings', label: 'Settings', hint: 'Power, display, keys, responder', icon: Settings },
   { id: 'onboarding', label: 'Setup & permissions', hint: 'Name, PIN, Android permissions', icon: ShieldCheck },
@@ -85,6 +87,7 @@ export function BottomPillNav({ activeScreen, onNavigate }: BottomPillNavProps) 
     (s) => s.alerts.filter((a) => !a.acknowledgedByMe).length
   );
   const sosActive = useMeshStore((s) => s.activeSosId !== null);
+  const appMode = useMeshStore((s) => s.appMode);
 
   const go = (id: AppScreenId) => {
     setMoreOpen(false);
@@ -128,7 +131,7 @@ export function BottomPillNav({ activeScreen, onNavigate }: BottomPillNavProps) 
 
       <Sheet open={moreOpen} title="More" onClose={() => setMoreOpen(false)}>
         <ul className="divide-y divide-[var(--line)]">
-          {MORE_ITEMS.map(({ id, label, hint, icon: Icon }) => (
+          {MORE_ITEMS.filter((m) => !m.realOnly || appMode === 'real').map(({ id, label, hint, icon: Icon }) => (
             <li key={id}>
               <button
                 type="button"

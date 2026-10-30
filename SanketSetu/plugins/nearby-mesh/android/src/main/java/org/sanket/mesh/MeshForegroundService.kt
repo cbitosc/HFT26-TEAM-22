@@ -17,11 +17,23 @@ class MeshForegroundService : Service() {
     companion object {
         private const val CHANNEL_ID = "sanket_mesh_relay_channel"
         private const val NOTIFICATION_ID = 4102
+
+        /** True while the foreground service is up; read by the radio diagnostics screen. */
+        @Volatile
+        var running = false
+            private set
     }
 
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
+        MeshDiag.log("foreground service created")
+    }
+
+    override fun onDestroy() {
+        running = false
+        MeshDiag.log("foreground service destroyed")
+        super.onDestroy()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -34,12 +46,20 @@ class MeshForegroundService : Service() {
 
         val notification = builder
             .setContentTitle("Sanket mesh active")
-            .setContentText("Relaying encrypted offline emergency packets nearby")
+            .setContentText("Keeping the phone-to-phone link open")
             .setSmallIcon(android.R.drawable.stat_sys_data_bluetooth)
             .setOngoing(true)
             .build()
 
-        startForeground(NOTIFICATION_ID, notification)
+        try {
+            startForeground(NOTIFICATION_ID, notification)
+            running = true
+            MeshDiag.log("foreground service running (startForeground ok)")
+        } catch (e: Exception) {
+            // e.g. a missing runtime permission for the connectedDevice type on Android 14+.
+            running = false
+            MeshDiag.warn("startForeground failed: ${e.javaClass.simpleName}: ${e.message}")
+        }
         return START_STICKY
     }
 

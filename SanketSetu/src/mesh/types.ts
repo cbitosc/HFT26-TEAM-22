@@ -95,6 +95,8 @@ export interface HelloCleartext {
   boxPub: string;
   batteryPct: number;
   powerMode: PowerMode;
+  /** Wire protocol version the sender speaks (1). Older HELLOs omit it. */
+  protocolVersion?: number;
   responderCert?: ResponderCertificate;
 }
 

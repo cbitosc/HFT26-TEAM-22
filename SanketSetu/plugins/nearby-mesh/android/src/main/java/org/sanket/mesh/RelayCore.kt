@@ -66,6 +66,11 @@ class RelayCore(private val connectionsClient: ConnectionsClient) {
             val ttl = json.optInt("ttl", 0)
             if (id.isEmpty()) return
 
+            // HELLO / SYNC_INV / SYNC_REQ are link-local: the TypeScript engine never relays them,
+            // so neither does this layer (otherwise phones two hops away would see them).
+            val type = json.optString("type", "")
+            if (type == "HELLO" || type == "SYNC_INV" || type == "SYNC_REQ") return
+
             pruneExpired()
             if (seen.containsKey(id)) {
                 return // Already relayed this packet id — standard flood-suppression dedup.

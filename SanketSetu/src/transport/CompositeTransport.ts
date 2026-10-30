@@ -40,9 +40,9 @@ export class CompositeTransport implements Transport {
           void cb(ev);
         }
       });
-      const unsubPacket = transport.onPacket((fromPeerId, bytes) => {
+      const unsubPacket = transport.onPacket((fromPeerId, bytes, fromNodeId) => {
         for (const cb of this.packetListeners) {
-          void cb(fromPeerId, bytes);
+          void cb(fromPeerId, bytes, fromNodeId);
         }
       });
       this.unsubs.push(unsubPeer, unsubPacket);

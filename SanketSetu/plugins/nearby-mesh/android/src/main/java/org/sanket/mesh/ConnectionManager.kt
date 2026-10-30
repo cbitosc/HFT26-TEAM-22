@@ -43,6 +43,9 @@ class ConnectionManager(
 
     /** endpointId -> display name, for currently-connected peers only. */
     val connectedPeers = ConcurrentHashMap<String, String>()
+
+    /** endpointId -> that phone's node id (from its version-tagged endpoint name), when known. */
+    private val nodeIds = ConcurrentHashMap<String, String>()
     private val peerLastActivityMs = ConcurrentHashMap<String, Long>()
 
     fun encodeEndpointName(nodeId: String, displayName: String): String {
@@ -73,13 +76,17 @@ class ConnectionManager(
         peerLastActivityMs[endpointId] = System.currentTimeMillis()
     }
 
-    fun registerConnected(endpointId: String, displayName: String) {
+    fun registerConnected(endpointId: String, displayName: String, nodeId: String? = null) {
         connectedPeers[endpointId] = displayName
+        if (nodeId != null) nodeIds[endpointId] = nodeId
         markActive(endpointId)
     }
 
+    fun nodeIdFor(endpointId: String): String? = nodeIds[endpointId]
+
     fun unregister(endpointId: String) {
         connectedPeers.remove(endpointId)
+        nodeIds.remove(endpointId)
         peerLastActivityMs.remove(endpointId)
     }
 
@@ -87,6 +94,7 @@ class ConnectionManager(
 
     fun clear() {
         connectedPeers.clear()
+        nodeIds.clear()
         peerLastActivityMs.clear()
     }
 

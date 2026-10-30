@@ -17,6 +17,7 @@ export type AppScreenId =
   | 'map'
   | 'simulator'
   | 'quality'
+  | 'diagnostics'
   | 'ai'
   | 'settings'
   | 'onboarding';

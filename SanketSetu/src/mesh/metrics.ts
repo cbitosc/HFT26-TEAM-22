@@ -19,7 +19,9 @@ export type PacketDropReason =
   | 'rate_limited'
   | 'ttl_expired'
   | 'saver_policy'
-  | 'oversized';
+  | 'oversized'
+  | 'malformed'
+  | 'decrypt_failed';
 
 export interface PriorityClassStats {
   priority: PriorityLevel;
@@ -137,6 +139,8 @@ export class MetricLogger {
     ttl_expired: 0,
     saver_policy: 0,
     oversized: 0,
+    malformed: 0,
+    decrypt_failed: 0,
   };
 
   private readonly peerSeries: PeerCountSample[] = [];

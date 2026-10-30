@@ -20,6 +20,8 @@ const DROP_LABEL: Record<PacketDropReason, string> = {
   ttl_expired: 'Hop limit reached',
   saver_policy: 'Dropped by battery saver',
   oversized: 'Too large',
+  malformed: 'Not a valid packet',
+  decrypt_failed: 'Could not decrypt',
 };
 
 const dash = (n: number | null | undefined, unit = '') => (n === null || n === undefined || n === 0 ? '—' : `${n}${unit}`);

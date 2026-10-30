@@ -9,6 +9,8 @@
 
 export interface TransportPeerEvent {
   peerId: string;
+  /** The phone's node id when the transport knows it (Nearby: from the endpoint name). */
+  nodeId?: string;
   displayName?: string;
   status: 'found' | 'lost';
   rssi?: number;
@@ -17,6 +19,8 @@ export interface TransportPeerEvent {
 
 export interface TransportPeerSummary {
   peerId: string;
+  /** Signed-identity node id of this neighbour when known. peerId is only a transport handle. */
+  nodeId?: string;
   displayName: string;
   rssi: number;
   linkQuality: number;
@@ -25,7 +29,8 @@ export interface TransportPeerSummary {
 export type PeerEventCallback = (event: TransportPeerEvent) => void | Promise<void>;
 export type PacketReceivedCallback = (
   fromPeerId: string,
-  bytes: Uint8Array
+  bytes: Uint8Array,
+  fromNodeId?: string
 ) => void | Promise<void>;
 
 export interface Transport {

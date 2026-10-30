@@ -113,6 +113,11 @@ export class MeshEngine {
   private responderCert: ResponderCertificate | null;
   private readonly relayJitterMs: number;
   private readonly retryTickMs: number;
+  /** Transport peer handle (Nearby endpointId) -> signed node id, learned from the transport or a direct packet. */
+  private readonly neighborNodeByPeer = new Map<string, string>();
+  private readonly helloSentTo = new Set<string>();
+  private lastHelloAt = 0;
+  private readonly alertListeners = new Set<(alert: StoredSOSAlert) => void>();
   private retryTimer: ReturnType<typeof setInterval> | null = null;
   private preferredPowerMode: PowerMode;
   private batteryPct: number;
@@ -158,14 +163,18 @@ export class MeshEngine {
     this.unsubPeer = this.transport.onPeer((ev) => {
       return this.handlePeerEvent(ev);
     });
-    this.unsubPacket = this.transport.onPacket((fromPeerId, bytes) => {
-      return this.handleRawBytes(fromPeerId, bytes);
+    this.unsubPacket = this.transport.onPacket((fromPeerId, bytes, fromNodeId) => {
+      return this.handleRawBytes(fromPeerId, bytes, fromNodeId);
     });
     await this.transport.start();
 
     if (this.retryTickMs > 0 && this.retryTimer === null) {
       this.retryTimer = setInterval(() => {
         void this.tickOutboxRetries();
+        // Refresh our HELLO so neighbours keep our name, keys and "last seen" current.
+        if (Date.now() - this.lastHelloAt > 30_000 && this.transport.getPeers().length > 0) {
+          void this.broadcastHello();
+        }
       }, this.retryTickMs);
       (this.retryTimer as { unref?: () => void }).unref?.();
     }
@@ -209,6 +218,17 @@ export class MeshEngine {
       this.relayPacketStore.set(e.packet.id, e.packet);
       this.seenCache.markSeenAndRecordNeighbor(e.packet.id, this.identity.nodeId);
     }
+  }
+
+  /** Called for every NEW SOS received from another phone (once per SOS id; repeats are silent). */
+  public onIncomingAlert(cb: (alert: StoredSOSAlert) => void): () => void {
+    this.alertListeners.add(cb);
+    return () => this.alertListeners.delete(cb);
+  }
+
+  /** Signed node id of a transport peer; falls back to the handle (Sim/Loopback use node ids as handles). */
+  private nodeIdOf(peerId: string): string {
+    return this.neighborNodeByPeer.get(peerId) ?? peerId;
   }
 
   public getPendingRelayCount(): number {
@@ -420,14 +440,21 @@ export class MeshEngine {
    * Broadcasts a signed `HELLO` packet to direct neighbors.
    */
   public async broadcastHello(): Promise<void> {
+    const packet = this.buildHelloPacket();
+    this.lastHelloAt = Date.now();
+    await this.transmitToNeighbors(packet);
+    for (const n of this.transport.getPeers()) this.helloSentTo.add(n.peerId);
+  }
+
+  private buildHelloPacket(): MeshPacket {
     const cleartext: HelloCleartext = {
       displayName: this.identity.displayName,
       signPub: this.identity.signPublicKeyB64,
       boxPub: this.identity.boxPublicKeyB64,
       batteryPct: this.batteryPct,
       powerMode: this.getEffectivePowerMode(),
+      protocolVersion: 1,
     };
-
     const packet = this.createSignedPacket({
       type: 'HELLO',
       prio: 3,
@@ -436,9 +463,15 @@ export class MeshEngine {
       nonce: bytesToBase64(nacl.randomBytes(24)),
       payload: bytesToBase64(utf8ToBytes(JSON.stringify(cleartext))),
     });
-
     this.seenCache.markSeenAndRecordNeighbor(packet.id, this.identity.nodeId);
-    await this.transmitToNeighbors(packet);
+    return packet;
+  }
+
+  /** Sends our signed HELLO to one specific neighbour (used when a link comes up). */
+  private async sendHelloTo(peerId: string): Promise<void> {
+    this.helloSentTo.add(peerId);
+    this.lastHelloAt = Date.now();
+    await this.sendPacketToPeer(peerId, this.buildHelloPacket());
   }
 
   /**
@@ -651,6 +684,97 @@ export class MeshEngine {
     }
     this.notifyStateChange();
     return alert;
+  }
+
+  /**
+   * "Everyone nearby" channel message: signed, encrypted with the shared emergency channel key (so
+   * any phone running Sanket Setu can read it, relays cannot be told apart from readers), flooded
+   * with the normal TTL. No delivery receipt exists for a broadcast, so the honest states are
+   * PENDING (no phone connected yet; queued) and SENT (handed to at least one nearby phone).
+   */
+  public async sendBroadcastMessage(rawText: string, priority: PriorityLevel = 2): Promise<StoredMessage> {
+    const text = rawText.trim().slice(0, MAX_TEXT_CHARS);
+    if (!text) throw new Error('Message text cannot be empty');
+
+    const cleartext: DirectMessageCleartext = { text, senderName: this.identity.displayName };
+    const encrypted = encryptChannelPayload(cleartext, this.channelKeySecret);
+    const packet = this.createSignedPacket({
+      type: 'MSG',
+      prio: priority,
+      ttl: MESH_CONSTANTS.TTL_NORMAL,
+      dst: 'BROADCAST',
+      nonce: encrypted.nonceB64,
+      payload: encrypted.ciphertextB64,
+    });
+    this.seenCache.markSeenAndRecordNeighbor(packet.id, this.identity.nodeId);
+    this.relayPacketStore.set(packet.id, packet);
+    this.metricLogger.recordPacketSent(packet.id, priority, packet.ts);
+
+    const stored: StoredMessage = {
+      id: packet.id,
+      conversationId: 'BROADCAST',
+      direction: 'outbound',
+      senderId: this.identity.nodeId,
+      senderName: this.identity.displayName,
+      recipientId: 'BROADCAST',
+      text,
+      priority,
+      timestamp: packet.ts,
+      deliveryState: 'PENDING',
+      relayedHops: 0,
+      route: [this.identity.nodeId],
+      reachedNodes: [],
+      packet,
+      signatureValid: true,
+      cipherSuite: 'Channel-XSalsa20-Poly1305',
+      packetHashHex: computeSha256LikeHex(JSON.stringify(packet)),
+    };
+    this.messages.set(packet.id, stored);
+
+    if (await this.dispatchPacket(packet)) {
+      stored.deliveryState = 'SENT';
+    } else {
+      this.outbox.upsert(packet); // sends automatically when a phone connects
+    }
+    this.notifyStateChange();
+    return stored;
+  }
+
+  private async handleBroadcastMsgPacket(
+    packet: MeshPacket,
+    fromPeerId: string,
+    routeWithMe: string[]
+  ): Promise<void> {
+    this.relayPacketStore.set(packet.id, { ...packet, route: routeWithMe });
+    const decrypted = decryptChannelPayload<DirectMessageCleartext>(
+      packet.payload,
+      packet.nonce,
+      this.channelKeySecret
+    );
+    if (decrypted) {
+      this.messages.set(packet.id, {
+        id: packet.id,
+        conversationId: 'BROADCAST',
+        direction: 'inbound',
+        senderId: packet.src,
+        senderName: decrypted.senderName || `Phone ${packet.src.slice(0, 4)}`,
+        recipientId: 'BROADCAST',
+        text: decrypted.text,
+        priority: packet.prio,
+        timestamp: packet.ts,
+        deliveryState: 'DELIVERED',
+        relayedHops: packet.hops + 1,
+        route: routeWithMe,
+        reachedNodes: [this.identity.nodeId],
+        packet: { ...packet, hops: packet.hops + 1, route: routeWithMe },
+        signatureValid: true,
+        cipherSuite: 'Channel-XSalsa20-Poly1305',
+        packetHashHex: computeSha256LikeHex(JSON.stringify(packet)),
+      });
+    } else {
+      this.recordDrop(packet.id, fromPeerId, 'decrypt_failed', 'Broadcast message uses a different channel key');
+    }
+    await this.maybeRelayPacket(packet, fromPeerId, routeWithMe);
   }
 
   /**
@@ -882,17 +1006,30 @@ export class MeshEngine {
 
   private async handlePeerEvent(ev: TransportPeerEvent): Promise<void> {
     if (ev.status === 'lost') {
-      const peer = this.peers.get(ev.peerId);
+      const nodeId = this.nodeIdOf(ev.peerId);
+      this.neighborNodeByPeer.delete(ev.peerId);
+      this.helloSentTo.delete(ev.peerId);
+      const peer = this.peers.get(nodeId);
       if (peer) {
         peer.isDirectNeighbor = false;
-        this.notifyStateChange();
       }
+      this.notifyStateChange();
       return;
     }
 
-    // Peer found: exchange HELLO and anti-entropy SYNC_INV immediately
-    await this.broadcastHello();
+    if (ev.nodeId) this.neighborNodeByPeer.set(ev.peerId, ev.nodeId);
+    const known = this.peers.get(this.nodeIdOf(ev.peerId));
+    if (known) {
+      known.isDirectNeighbor = true;
+      known.hopsAway = 1;
+      known.lastSeenTs = Date.now();
+    }
+    this.notifyStateChange();
+
+    // New link: introduce ourselves (signed HELLO with keys), then reconcile what each side has.
+    await this.sendHelloTo(ev.peerId);
     await this.sendSyncInventoryTo(ev.peerId);
+    await this.flushOutboxToNewPeer(ev.peerId);
   }
 
   public async sendSyncInventoryTo(peerId: string): Promise<void> {
@@ -910,7 +1047,7 @@ export class MeshEngine {
       type: 'SYNC_INV',
       prio: 3,
       ttl: 2,
-      dst: peerId,
+      dst: this.nodeIdOf(peerId),
       nonce: bytesToBase64(nacl.randomBytes(24)),
       payload: bytesToBase64(utf8ToBytes(JSON.stringify(inv))),
     });
@@ -920,7 +1057,7 @@ export class MeshEngine {
   }
 
   private checkRateLimitAndReputation(fromPeerId: string): boolean {
-    const peer = this.peers.get(fromPeerId);
+    const peer = this.peers.get(this.nodeIdOf(fromPeerId));
     if (!peer) return true;
     if (peer.invalidSigCount >= MAX_INVALID_SIGS_BEFORE_BAN) {
       return false; // Peer banned for repeated invalid signatures
@@ -945,7 +1082,7 @@ export class MeshEngine {
 
   private recordInvalidSignatureFrom(peerId: string): void {
     this.packetsDroppedInvalidSig += 1;
-    const peer = this.peers.get(peerId);
+    const peer = this.peers.get(this.nodeIdOf(peerId));
     if (peer) {
       peer.invalidSigCount += 1;
     }
@@ -954,8 +1091,10 @@ export class MeshEngine {
 
   private async handleRawBytes(
     fromPeerId: string,
-    bytes: Uint8Array
+    bytes: Uint8Array,
+    fromNodeId?: string
   ): Promise<void> {
+    if (fromNodeId) this.neighborNodeByPeer.set(fromPeerId, fromNodeId);
     if (bytes.byteLength > MAX_PACKET_BYTES) {
       this.recordDrop(
         'oversized',
@@ -979,10 +1118,17 @@ export class MeshEngine {
     try {
       packet = JSON.parse(bytesToUtf8(bytes)) as MeshPacket;
     } catch {
+      this.recordDrop('unparsed', fromPeerId, 'malformed', 'Payload is not valid JSON');
       return;
     }
 
     if (!packet || packet.v !== 1 || !packet.id || !packet.sig) {
+      this.recordDrop(
+        packet?.id ?? 'unknown',
+        fromPeerId,
+        'malformed',
+        'Missing version, id or signature (or unsupported protocol version)'
+      );
       return;
     }
 
@@ -1045,7 +1191,13 @@ export class MeshEngine {
 
     // 4. Learn/update origin peer public keys from verified packet header
     const existingOrigin = this.peers.get(packet.src);
-    const isDirect = fromPeerId === packet.src;
+    // Is the sender of THIS packet the phone we received it from? Nearby handles are not node ids,
+    // so compare against the node id the transport told us. A packet with hops=0 can only have come
+    // straight from its originator, which lets us learn the mapping if the transport event was missed.
+    if (!this.neighborNodeByPeer.has(fromPeerId) && packet.hops === 0) {
+      this.neighborNodeByPeer.set(fromPeerId, packet.src);
+    }
+    const isDirect = this.nodeIdOf(fromPeerId) === packet.src;
     const trustStatus = evaluatePeerTrust(
       existingOrigin,
       packet.srcSignPub,
@@ -1078,7 +1230,7 @@ export class MeshEngine {
     // 5. Handle packet by type
     switch (packet.type) {
       case 'HELLO': {
-        await this.handleHelloPacket(packet, isDirect);
+        await this.handleHelloPacket(packet, isDirect, fromPeerId);
         break;
       }
       case 'SYNC_INV': {
@@ -1120,12 +1272,17 @@ export class MeshEngine {
 
   private async handleHelloPacket(
     packet: MeshPacket,
-    isDirect: boolean
+    isDirect: boolean,
+    fromPeerId: string
   ): Promise<void> {
     try {
       const hello = JSON.parse(
         bytesToUtf8(base64ToBytesSafe(packet.payload))
       ) as HelloCleartext;
+      if (hello.protocolVersion !== undefined && hello.protocolVersion !== 1) {
+        this.recordDrop(packet.id, fromPeerId, 'malformed', `HELLO protocol version ${hello.protocolVersion} unsupported`);
+        return;
+      }
       const peer = this.peers.get(packet.src);
       if (peer) {
         peer.displayName = hello.displayName || peer.displayName;
@@ -1135,6 +1292,11 @@ export class MeshEngine {
           peer.isDirectNeighbor = true;
           peer.hopsAway = 1;
         }
+      }
+
+      // If they greeted us first, greet back so they learn our keys too.
+      if (isDirect && !this.helloSentTo.has(fromPeerId)) {
+        await this.sendHelloTo(fromPeerId);
       }
 
       // Trigger epidemic outbox retry when we hear a HELLO
@@ -1166,7 +1328,7 @@ export class MeshEngine {
           type: 'SYNC_REQ',
           prio: 3,
           ttl: 2,
-          dst: fromPeerId,
+          dst: packet.src,
           nonce: bytesToBase64(nacl.randomBytes(24)),
           payload: bytesToBase64(utf8ToBytes(JSON.stringify(req))),
         });
@@ -1266,6 +1428,10 @@ export class MeshEngine {
     fromPeerId: string,
     routeWithMe: string[]
   ): Promise<void> {
+    if (packet.dst === 'BROADCAST') {
+      await this.handleBroadcastMsgPacket(packet, fromPeerId, routeWithMe);
+      return;
+    }
     this.relayPacketStore.set(packet.id, {
       ...packet,
       route: routeWithMe,
@@ -1280,6 +1446,7 @@ export class MeshEngine {
         this.identity.boxSecretKeyB64
       );
       if (!decrypted) {
+        this.recordDrop(packet.id, fromPeerId, 'decrypt_failed', `Direct message from ${packet.src} could not be decrypted (wrong or unknown key)`);
         return;
       }
 
@@ -1386,6 +1553,9 @@ export class MeshEngine {
         },
       };
       this.alerts.set(packet.id, alert);
+      for (const cb of this.alertListeners) cb(alert);
+    } else {
+      this.recordDrop(packet.id, fromPeerId, 'decrypt_failed', 'SOS uses a different channel key; relayed but not readable');
     }
 
     // Always relay SOS across the mesh first (TTL up to 12), then emit reach receipt
@@ -1452,17 +1622,21 @@ export class MeshEngine {
           this.outbox.markAcknowledged(ack.targetAlertId, packet.src, true);
         }
 
-        // Record P0 SOS closed-loop ACK latency in MetricLogger
-        this.metricLogger.recordPacketDelivered(
-          ack.targetAlertId,
-          0,
-          Math.max(1, packet.hops + 1),
-          Date.now()
-        );
-        const sosMsg = this.messages.get(ack.targetAlertId);
-        if (sosMsg) {
-          sosMsg.deliveryState = 'DELIVERED';
-          sosMsg.relayedHops = Math.max(sosMsg.relayedHops, packet.hops + 1);
+        // Only a VERIFIED responder counts as "closed loop": record latency and mark the SOS
+        // delivered. An acknowledgement from an ordinary phone is shown ("Acknowledged by ...") but
+        // does not claim a responder is on the way.
+        if (certVerify.valid) {
+          this.metricLogger.recordPacketDelivered(
+            ack.targetAlertId,
+            0,
+            Math.max(1, packet.hops + 1),
+            Date.now()
+          );
+          const sosMsg = this.messages.get(ack.targetAlertId);
+          if (sosMsg) {
+            sosMsg.deliveryState = 'DELIVERED';
+            sosMsg.relayedHops = Math.max(sosMsg.relayedHops, packet.hops + 1);
+          }
         }
       }
 
@@ -1683,6 +1857,7 @@ export class MeshEngine {
         if (msg && msg.deliveryState === 'PENDING') {
           msg.deliveryState = 'SENT';
         }
+        if (isFireAndForget(pkt)) this.outbox.remove(pkt.id);
       }
     }
     if (retried > 0) {
@@ -1701,6 +1876,7 @@ export class MeshEngine {
         if (msg && msg.deliveryState === 'PENDING') {
           msg.deliveryState = 'SENT';
         }
+        if (isFireAndForget(pkt)) this.outbox.remove(pkt.id);
       }
     }
   }
@@ -1721,7 +1897,7 @@ export class MeshEngine {
     // Direct-neighbor fast path (§4): if destination is a direct neighbor, send directly first
     if (packet.dst !== 'BROADCAST') {
       const directTarget = connectedNeighbors.find(
-        (n) => n.peerId === packet.dst && n.peerId !== excludePeerId
+        (n) => (n.nodeId ?? n.peerId) === packet.dst && n.peerId !== excludePeerId
       );
       if (directTarget) {
         const ok = await this.sendPacketToPeer(directTarget.peerId, packet);
@@ -1732,7 +1908,7 @@ export class MeshEngine {
     let anySent = false;
     for (const neighbor of connectedNeighbors) {
       if (neighbor.peerId === excludePeerId) continue;
-      if (neighbor.peerId === packet.src) continue;
+      if ((neighbor.nodeId ?? neighbor.peerId) === packet.src) continue;
       const ok = await this.sendPacketToPeer(neighbor.peerId, packet);
       if (ok) {
         anySent = true;
@@ -1762,6 +1938,21 @@ export class MeshEngine {
     }
     return ok;
   }
+}
+
+/**
+ * Packets that no one acknowledges end to end. They are retried only until handed to a neighbour
+ * (relays and anti-entropy sync carry them from there), instead of being re-sent every 30 s for an
+ * hour. SOS (until a verified responder ack) and direct messages (until a signed DELIVERED ACK)
+ * keep retrying.
+ */
+function isFireAndForget(pkt: MeshPacket): boolean {
+  return (
+    pkt.type === 'SAFE' ||
+    pkt.type === 'HAZARD' ||
+    pkt.type === 'SOS_ACK' ||
+    (pkt.type === 'MSG' && pkt.dst === 'BROADCAST')
+  );
 }
 
 function base64ToBytesSafe(b64: string): Uint8Array {

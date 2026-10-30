@@ -54,6 +54,7 @@ import {
   MeshPermissionState,
   NearbyMeshNative,
   NearbyTransport,
+  type RadioDiagnostics,
 } from '../transport/NearbyTransport';
 import { NullTransport } from '../transport/NullTransport';
 import {
@@ -262,6 +263,8 @@ export interface MeshStoreState {
   checkMeshPermissions: () => Promise<void>;
   /** Triggers the OS runtime permission dialog(s). Show a rationale screen before calling this. */
   requestMeshPermissions: () => Promise<void>;
+  /** Re-checks permissions and (re)starts advertising + discovery. Safe to call at any time. */
+  ensureRadio: () => Promise<void>;
   /** Opens this app's system Settings page. */
   openAppSettings: () => Promise<void>;
   dismissPermissionGate: () => void;
@@ -579,6 +582,16 @@ function syncStoreFromEngine(
   });
 }
 
+/** Live radio diagnostics for the Radio diagnostics screen (REAL mode only; null in DEMO). */
+export async function getRadioDiagnostics(): Promise<
+  (RadioDiagnostics & { outboxSize: number; lastDrop: PacketDropLogEntry | null }) | null
+> {
+  if (!nativeNearbyTransport || !localEngine) return null;
+  const base = await nativeNearbyTransport.getDiagnostics();
+  const drops = localEngine.getDropLog();
+  return { ...base, outboxSize: localEngine.outbox.size(), lastDrop: drops[drops.length - 1] ?? null };
+}
+
 async function teardownMesh(): Promise<void> {
   for (const inst of virtualInstances.values()) {
     await inst.engine.stop();
@@ -819,6 +832,8 @@ export const useMeshStore = create<MeshStoreState>((set, get) => ({
       ttl_expired: 0,
       saver_policy: 0,
       oversized: 0,
+      malformed: 0,
+      decrypt_failed: 0,
     },
     packetsRelayed: 0,
     packetsSuppressedDuplicate: 0,
@@ -854,6 +869,13 @@ export const useMeshStore = create<MeshStoreState>((set, get) => ({
 
     if (Capacitor.isNativePlatform()) {
       void get().checkMeshPermissions();
+      if (typeof document !== 'undefined') {
+        // Coming back to the app (e.g. after the user switched Bluetooth on or granted a permission
+        // in system settings) must re-check permissions and restart the radio if it is not running.
+        document.addEventListener('visibilitychange', () => {
+          if (document.visibilityState === 'visible') void get().ensureRadio();
+        });
+      }
       try {
         await NearbyMeshNative.addListener('permissionState', (state) => {
           set({ permissionState: state });
@@ -979,6 +1001,7 @@ export const useMeshStore = create<MeshStoreState>((set, get) => ({
     if (localEngine) {
       localEngine.identity.displayName = cleanName;
       localEngine.setPowerPreference(powerMode);
+      nativeNearbyTransport?.setDisplayName(cleanName);
       await localEngine.broadcastHello();
     }
 
@@ -1001,6 +1024,7 @@ export const useMeshStore = create<MeshStoreState>((set, get) => ({
     await persistIdentity(updated);
     if (localEngine) {
       localEngine.identity.displayName = clean;
+      nativeNearbyTransport?.setDisplayName(clean);
       await localEngine.broadcastHello();
     }
     set({ identity: updated });
@@ -1622,11 +1646,21 @@ export const useMeshStore = create<MeshStoreState>((set, get) => ({
         // The initial NearbyTransport.start() call may have no-op'd internally if permissions
         // weren't granted yet (the native plugin now rejects startAdvertising/startDiscovery
         // without them) — retry now that they are.
-        void nativeNearbyTransport?.start();
+        await nativeNearbyTransport?.startRadio();
       }
     } catch {
       // ignore
     }
+  },
+
+  ensureRadio: async () => {
+    if (!Capacitor.isNativePlatform() || !nativeNearbyTransport) return;
+    await get().checkMeshPermissions();
+    if (get().permissionState?.allGranted === false) return;
+    if (!nativeNearbyTransport.isRadioRunning()) {
+      await nativeNearbyTransport.startRadio();
+    }
+    syncStoreFromEngine(set, get);
   },
 
   openAppSettings: async () => {
