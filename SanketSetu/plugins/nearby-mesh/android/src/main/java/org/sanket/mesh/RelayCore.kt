@@ -44,6 +44,15 @@ class RelayCore(private val connectionsClient: ConnectionsClient) {
     private val seen = ConcurrentHashMap<String, SeenEntry>()
     private val insertionOrder = java.util.Collections.synchronizedList(ArrayList<String>())
 
+    /** Mirrors the TS PowerManager mode so Saver can restrict native relay the same way the
+     * TS engine's own canRelayUnderPowerPolicy does (priority.ts): only P0/P1 relay. */
+    @Volatile
+    private var powerMode: String = "active"
+
+    fun setPowerMode(mode: String) {
+        powerMode = mode
+    }
+
     /**
      * Called with every payload this device receives, before (and independent of) JS processing.
      * Relays it on to every other currently-connected endpoint if it is new and still has hops
@@ -62,6 +71,15 @@ class RelayCore(private val connectionsClient: ConnectionsClient) {
                 return // Already relayed this packet id — standard flood-suppression dedup.
             }
             markSeen(id)
+
+            // Saver mode: only relay P0 (SOS/SOS_ACK) and P1 (Emergency/Safe/Hazard), matching
+            // the TS engine's own canRelayUnderPowerPolicy (src/mesh/priority.ts). Control
+            // packets (prio 3: HELLO/ACK/SYNC_INV/SYNC_REQ) have no "prio" field semantics that
+            // matter here since they're small and link-local (TTL 2) — only dropped if >=2.
+            val prio = json.optInt("prio", 0)
+            if (powerMode == "saver" && prio >= 2) {
+                return
+            }
 
             val nextTtl = ttl - 1
             if (nextTtl <= 0) {

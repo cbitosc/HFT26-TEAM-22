@@ -74,6 +74,12 @@ export interface NearbyMeshPluginInterface {
   requestMeshPermissions(): Promise<MeshPermissionState>;
   /** Opens this app's system Settings page (for a denial screen's "Open Settings" action). */
   openAppSettings(): Promise<void>;
+  /**
+   * Active = continuous discovery. Balanced/Saver = native duty-cycles discovery on a timer
+   * (10s/20s balanced, 5s/45s saver — matching src/mesh/power.ts's computePowerSchedule) and
+   * RelayCore stops relaying P2/P3 packets in Saver. Advertising stays on in every mode.
+   */
+  setPowerMode(options: { mode: string }): Promise<{ mode: string }>;
   addListener(
     eventName: 'permissionState',
     listenerFunc: (event: MeshPermissionState) => void
@@ -352,5 +358,13 @@ export class NearbyTransport implements Transport {
 
   public getPeers(): TransportPeerSummary[] {
     return Array.from(this.peers.values());
+  }
+
+  public async setPowerMode(mode: string): Promise<void> {
+    try {
+      await NearbyMeshNative.setPowerMode({ mode });
+    } catch {
+      // Running in browser without native bridge.
+    }
   }
 }

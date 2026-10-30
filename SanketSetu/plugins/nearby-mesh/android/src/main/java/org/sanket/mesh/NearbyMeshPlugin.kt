@@ -4,8 +4,11 @@ import android.Manifest
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.provider.Settings
 import android.util.Base64
+import android.util.Log
 import com.getcapacitor.JSArray
 import com.getcapacitor.JSObject
 import com.getcapacitor.PermissionState
@@ -56,15 +59,38 @@ import android.security.keystore.KeyProperties
 class NearbyMeshPlugin : Plugin(), ConnectionManager.Listener {
 
     companion object {
+        private const val TAG = "SanketMeshPlugin"
         const val KEYSTORE_ALIAS = "org.sanket.mesh.identity.masterkey"
 
         /** Bounded backstop so a flood can't grow this queue without limit while the WebView is paused. */
         const val PENDING_PAYLOAD_RING_CAPACITY = 256
+
+        // Discovery duty-cycle windows, matching src/mesh/power.ts's computePowerSchedule so the
+        // documented TS parameters (10s/20s balanced, 5s/45s saver) are what actually runs on the
+        // radio, not just a number shown in the UI.
+        const val BALANCED_SCAN_MS = 10_000L
+        const val BALANCED_BASE_SLEEP_MS = 20_000L
+        const val SAVER_SCAN_MS = 5_000L
+        const val SAVER_BASE_SLEEP_MS = 45_000L
+        const val MAX_SLEEP_MS = 60_000L
     }
 
     private lateinit var connectionsClient: ConnectionsClient
     private lateinit var connectionManager: ConnectionManager
     private lateinit var relayCore: RelayCore
+
+    // --- Power-mode duty cycling ------------------------------------------------------------
+    //
+    // Active: discovery runs continuously (no scheduling). Balanced/Saver: discovery alternates
+    // on/off on a timer (advertising stays on throughout — it's what lets OTHER devices find us,
+    // and is comparatively cheap; what we duty-cycle is OUR scanning for others). Consecutive
+    // empty scan windows (no peer connected during that window) double the sleep interval up to
+    // MAX_SLEEP_MS; a window that ends with at least one connected peer resets the backoff.
+    private val powerHandler = Handler(Looper.getMainLooper())
+    private var powerMode: String = "active"
+    private var discoveryActive = false
+    private var consecutiveEmptyScans = 0
+    private var dutyCycleRunnable: Runnable? = null
 
     /**
      * Bounded ring buffer of payloads received while nothing has drained them yet. Capacitor's
@@ -248,26 +274,96 @@ class NearbyMeshPlugin : Plugin(), ConnectionManager.Listener {
         }
         serviceId = call.getString("serviceId") ?: serviceId
 
+        startDiscoveryInternal(
+            onSuccess = { call.resolve(JSObject().put("started", true)) },
+            onFailure = { err -> call.reject("startDiscovery failed: ${err.message}") }
+        )
+    }
+
+    private fun startDiscoveryInternal(onSuccess: () -> Unit = {}, onFailure: (Exception) -> Unit = {}) {
+        if (discoveryActive) {
+            onSuccess()
+            return
+        }
         val options = DiscoveryOptions.Builder()
             .setStrategy(Strategy.P2P_CLUSTER)
             .build()
-
         connectionsClient.startDiscovery(
             serviceId,
             endpointDiscoveryCallback,
             options
         ).addOnSuccessListener {
-            call.resolve(JSObject().put("started", true))
+            discoveryActive = true
+            onSuccess()
         }.addOnFailureListener { err ->
-            call.reject("startDiscovery failed: ${err.message}")
+            Log.d(TAG, "startDiscoveryInternal failed: ${err.message}")
+            onFailure(err)
         }
+    }
+
+    private fun stopDiscoveryInternal() {
+        if (!discoveryActive) return
+        connectionsClient.stopDiscovery()
+        discoveryActive = false
+    }
+
+    /**
+     * Active = continuous discovery. Balanced/Saver = discovery duty-cycles on a timer (see the
+     * BALANCED and SAVER window constants above), backing off up to MAX_SLEEP_MS after
+     * consecutive empty scans and resetting as soon as a scan window ends with a connected peer.
+     * Advertising is left running in every mode — it's what lets other phones find us, and is
+     * comparatively cheap; what actually costs battery is OUR scanning for others, which this
+     * duty-cycles.
+     */
+    @PluginMethod
+    fun setPowerMode(call: PluginCall) {
+        val mode = call.getString("mode") ?: "active"
+        powerMode = mode
+        relayCore.setPowerMode(mode)
+        consecutiveEmptyScans = 0
+        dutyCycleRunnable?.let { powerHandler.removeCallbacks(it) }
+        dutyCycleRunnable = null
+
+        if (mode == "active") {
+            startDiscoveryInternal()
+        } else {
+            scheduleDutyCycleScan()
+        }
+        call.resolve(JSObject().put("mode", powerMode))
+    }
+
+    private fun scheduleDutyCycleScan() {
+        val scanMs = if (powerMode == "saver") SAVER_SCAN_MS else BALANCED_SCAN_MS
+        startDiscoveryInternal()
+
+        val endScanRunnable = Runnable {
+            val foundPeerThisWindow = connectionManager.connectedPeers.isNotEmpty()
+            consecutiveEmptyScans = if (foundPeerThisWindow) 0 else consecutiveEmptyScans + 1
+            stopDiscoveryInternal()
+            scheduleDutyCycleSleep()
+        }
+        dutyCycleRunnable = endScanRunnable
+        powerHandler.postDelayed(endScanRunnable, scanMs)
+    }
+
+    private fun scheduleDutyCycleSleep() {
+        val baseSleepMs = if (powerMode == "saver") SAVER_BASE_SLEEP_MS else BALANCED_BASE_SLEEP_MS
+        val backoffShift = minOf(consecutiveEmptyScans, 2) // cap: base * 4
+        val sleepMs = minOf(MAX_SLEEP_MS, baseSleepMs shl backoffShift)
+
+        val resumeScanRunnable = Runnable { scheduleDutyCycleScan() }
+        dutyCycleRunnable = resumeScanRunnable
+        powerHandler.postDelayed(resumeScanRunnable, sleepMs)
     }
 
     @PluginMethod
     fun stop(call: PluginCall) {
+        dutyCycleRunnable?.let { powerHandler.removeCallbacks(it) }
+        dutyCycleRunnable = null
         connectionsClient.stopAdvertising()
         connectionsClient.stopDiscovery()
         connectionsClient.stopAllEndpoints()
+        discoveryActive = false
         connectionManager.clear()
         pendingPayloadRing.clear()
         stopMeshForegroundService()

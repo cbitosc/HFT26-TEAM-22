@@ -557,6 +557,11 @@ async function setupDefaultFourNodeChain(
     await v.engine.start();
   }
 
+  // Apply the identity's initial power mode to the native duty-cycle scheduler too, so a device
+  // that starts in Balanced/Saver (e.g. restored from a previous session) duty-cycles from the
+  // first scan rather than defaulting to Active until the next explicit setPowerMode() call.
+  void nativeNearbyTransport?.setPowerMode(localEngine.getEffectivePowerMode());
+
   simController.recomputeNeighborhoods();
 
   // Seed initial multi-hop traffic:
@@ -866,6 +871,7 @@ export const useMeshStore = create<MeshStoreState>((set, get) => ({
 
   setPowerMode: (mode: PowerMode) => {
     localEngine?.setPowerPreference(mode);
+    void nativeNearbyTransport?.setPowerMode(mode);
     syncStoreFromEngine(set, get);
   },
 
