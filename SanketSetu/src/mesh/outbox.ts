@@ -73,6 +73,12 @@ export class StoreAndForwardOutbox {
     return true;
   }
 
+  /** Re-inserts a persisted entry after an app restart; it becomes due for retry immediately. */
+  public restore(entry: OutboxEntry, now = Date.now()): void {
+    if (this.entries.has(entry.packet.id)) return;
+    this.entries.set(entry.packet.id, { ...entry, nextRetryAt: now });
+  }
+
   public remove(packetId: string): void {
     this.entries.delete(packetId);
   }

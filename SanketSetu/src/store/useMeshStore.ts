@@ -266,12 +266,36 @@ const virtualInstances = new Map<string, VirtualPeerInstance>();
 const UI_SYNC_INTERVAL_MS = 250;
 const TELEMETRY_INTERVAL_MS = 1000;
 const SEEN_PERSIST_INTERVAL_MS = 1000;
+const PERSIST_INTERVAL_MS = 1500;
+let pendingPersistTimer: ReturnType<typeof setTimeout> | null = null;
 let lastQualitySnapshotAt = 0;
 let pendingSyncTimer: ReturnType<typeof setTimeout> | null = null;
 let pendingTransmissions: SimLinkTransmissionEvent[] = [];
 let pendingTransmissionTimer: ReturnType<typeof setTimeout> | null = null;
 let pendingSeenRows: PersistedSeenRow[] = [];
 let pendingSeenTimer: ReturnType<typeof setTimeout> | null = null;
+
+/** Debounced write of this node's own messages, SOS alerts and unacknowledged outbox to Dexie. */
+function schedulePersistState(): void {
+  if (pendingPersistTimer !== null) return;
+  pendingPersistTimer = setTimeout(() => {
+    pendingPersistTimer = null;
+    const engine = localEngine;
+    if (!engine) return;
+    const me = engine.identity.nodeId;
+    void (async () => {
+      try {
+        await sanketDb.messages.bulkPut(engine.getMessages().filter((m) => m.senderId === me));
+        await sanketDb.alerts.bulkPut(engine.getAlerts().filter((a) => a.senderId === me));
+        const entries = engine.outbox.getAllEntries();
+        await sanketDb.outbox.clear();
+        await sanketDb.outbox.bulkPut(entries);
+      } catch {
+        // IndexedDB unavailable — in-memory state still works.
+      }
+    })();
+  }, PERSIST_INTERVAL_MS);
+}
 
 function shallowEqualRecord<T extends object>(a: T, b: T): boolean {
   const ka = Object.keys(a) as (keyof T)[];
@@ -470,6 +494,7 @@ function syncStoreFromEngine(
   // Telemetry cards: recompute the (comparatively expensive) quality snapshot at most once per
   // second, and keep the previous object reference when nothing changed so selectors on
   // `metrics` / `meshQuality` don't re-render for identical values.
+  schedulePersistState();
   const prev = get();
   const nextMetrics = shallowEqualRecord(prev.metrics, metrics) ? prev.metrics : metrics;
   const now = Date.now();
@@ -565,7 +590,25 @@ async function setupDefaultFourNodeChain(
     transport: engineTransport,
     responderCert: get().myResponderCert,
     relayJitterMs: 15,
+    retryTickMs: 1000,
   });
+
+  // Resume anything that was queued before the app was killed or the phone rebooted: the
+  // engine's retry loop and the next peerFound pick it up from here.
+  try {
+    const [msgs, alerts, outboxRows] = await Promise.all([
+      sanketDb.messages.where('senderId').equals(userIdentity.nodeId).toArray(),
+      sanketDb.alerts.where('senderId').equals(userIdentity.nodeId).toArray(),
+      sanketDb.outbox.toArray(),
+    ]);
+    localEngine.restoreState({
+      messages: msgs,
+      alerts,
+      outbox: outboxRows.filter((e) => e.packet.src === userIdentity.nodeId),
+    });
+  } catch {
+    // IndexedDB unavailable (private mode): run without persistence.
+  }
 
   // Hydrate 1h SeenCache from Dexie and wire persistence callback
   const persistedSeen = await loadUnexpiredSeenEntries();

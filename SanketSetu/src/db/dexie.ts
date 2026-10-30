@@ -38,6 +38,11 @@ export class SanketDatabase extends Dexie {
       seen: 'packetId, expiresAt',
       kv: 'key',
     });
+    // v2: index senderId so a restart can restore this node's own messages/alerts.
+    this.version(2).stores({
+      messages: 'id, conversationId, timestamp, priority, deliveryState, senderId',
+      alerts: 'id, priority, timestamp, category, senderId',
+    });
   }
 }
 

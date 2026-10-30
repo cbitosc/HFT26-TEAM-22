@@ -22,6 +22,7 @@ import {
   LocationPrecision,
   MeshActivityMetrics,
   MeshPacket,
+  OutboxEntry,
   PeerNode,
   PowerMode,
   PriorityLevel,
@@ -93,6 +94,11 @@ export interface MeshEngineOptions {
   relayJitterMs?: number;
   initialPowerMode?: PowerMode;
   initialBatteryPct?: number;
+  /**
+   * Interval for the outbox retry loop (exponential backoff 1 s -> 30 s per entry). 0 disables it,
+   * which keeps unit tests deterministic; the app passes 1000.
+   */
+  retryTickMs?: number;
 }
 
 export class MeshEngine {
@@ -106,6 +112,8 @@ export class MeshEngine {
   private channelKeySecret?: string;
   private responderCert: ResponderCertificate | null;
   private readonly relayJitterMs: number;
+  private readonly retryTickMs: number;
+  private retryTimer: ReturnType<typeof setInterval> | null = null;
   private preferredPowerMode: PowerMode;
   private batteryPct: number;
   private isCharging = false;
@@ -136,6 +144,7 @@ export class MeshEngine {
     this.channelKeySecret = options.channelKeySecret;
     this.responderCert = options.responderCert ?? null;
     this.relayJitterMs = options.relayJitterMs ?? MESH_CONSTANTS.JITTER_NORMAL_MAX_MS;
+    this.retryTickMs = options.retryTickMs ?? 0;
     this.preferredPowerMode = options.initialPowerMode ?? 'active';
     this.batteryPct = options.initialBatteryPct ?? 88;
 
@@ -154,11 +163,22 @@ export class MeshEngine {
     });
     await this.transport.start();
 
+    if (this.retryTickMs > 0 && this.retryTimer === null) {
+      this.retryTimer = setInterval(() => {
+        void this.tickOutboxRetries();
+      }, this.retryTickMs);
+      (this.retryTimer as { unref?: () => void }).unref?.();
+    }
+
     // Immediately broadcast HELLO to any already-present neighbors
     await this.broadcastHello();
   }
 
   public async stop(): Promise<void> {
+    if (this.retryTimer !== null) {
+      clearInterval(this.retryTimer);
+      this.retryTimer = null;
+    }
     for (const timer of this.pendingRelayTimers.values()) {
       clearTimeout(timer);
     }
@@ -166,6 +186,29 @@ export class MeshEngine {
     this.unsubPeer?.();
     this.unsubPacket?.();
     await this.transport.stop();
+  }
+
+  /**
+   * Rehydrates persisted state after an app restart: this node's own messages/alerts, and the
+   * unacknowledged outbox, which becomes due for retry immediately (the retry loop and the
+   * next peerFound then resume delivery without the user doing anything).
+   */
+  public restoreState(state: {
+    messages?: StoredMessage[];
+    alerts?: StoredSOSAlert[];
+    outbox?: OutboxEntry[];
+  }): void {
+    for (const m of state.messages ?? []) {
+      if (!this.messages.has(m.id)) this.messages.set(m.id, m);
+    }
+    for (const a of state.alerts ?? []) {
+      if (!this.alerts.has(a.id)) this.alerts.set(a.id, a);
+    }
+    for (const e of state.outbox ?? []) {
+      this.outbox.restore(e);
+      this.relayPacketStore.set(e.packet.id, e.packet);
+      this.seenCache.markSeenAndRecordNeighbor(e.packet.id, this.identity.nodeId);
+    }
   }
 
   public getPendingRelayCount(): number {
@@ -1400,6 +1443,12 @@ export class MeshEngine {
           alert.responderAcks[existingIdx] = record;
         } else {
           alert.responderAcks.push(record);
+        }
+
+        // Only a responder with a valid Authority-signed certificate closes the loop and stops
+        // the SOS re-send; an unverified ACK is shown as unverified and the beacon keeps going.
+        if (certVerify.valid && alert.senderId === this.identity.nodeId) {
+          this.outbox.markAcknowledged(ack.targetAlertId, packet.src, true);
         }
 
         // Record P0 SOS closed-loop ACK latency in MetricLogger
