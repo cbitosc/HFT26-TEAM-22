@@ -176,6 +176,34 @@ class SectionSnapshotTest : SnapshotBase() {
         }()
     }
 
+    private fun sampleMesh(): com.bitchat.android.ai.topology.MeshLayout {
+        val e = { a: String, b: String, ok: Boolean -> com.bitchat.android.ai.topology.TopoEdge(a, b, ok) }
+        return com.bitchat.android.ai.topology.TopologyLayout.layout(
+            "me",
+            mapOf("me" to "You", "meera" to "meera", "ravi" to "ravi", "anita" to "anita", "dev" to "dev", "kiran" to "kiran", "ghost" to "Shelter 3"),
+            listOf(e("me", "meera", true), e("me", "ravi", true), e("meera", "anita", true), e("ravi", "anita", false),
+                e("anita", "dev", true), e("ravi", "kiran", true), e("x1", "x2", true))
+        )
+    }
+    @Test fun meshMapLight() = snap("12_mesh_map_light") {
+        tabs(com.bitchat.android.ui.MainScreenTab.RADAR) {
+            com.bitchat.android.ui.MeshMapContent(sampleMesh(), onDirectChat = {}, modifier = Modifier.weight(1f), initialSelectedId = "dev")
+        }()
+    }
+    @Test fun meshMapDark() = snap("12_mesh_map_dark", dark = true) {
+        tabs(com.bitchat.android.ui.MainScreenTab.RADAR) {
+            com.bitchat.android.ui.MeshMapContent(sampleMesh(), onDirectChat = {}, modifier = Modifier.weight(1f), initialSelectedId = "dev")
+        }()
+    }
+    @Test fun meshMapEmpty() = snap("12_mesh_map_empty") {
+        tabs(com.bitchat.android.ui.MainScreenTab.RADAR) {
+            com.bitchat.android.ui.MeshMapContent(
+                com.bitchat.android.ai.topology.TopologyLayout.layout("me", emptyMap(), emptyList()),
+                onDirectChat = {}, modifier = Modifier.weight(1f)
+            )
+        }()
+    }
+
     @Test fun sosIdleLight() = snap("13_sos_idle_light") {
         tabs(com.bitchat.android.ui.MainScreenTab.SOS) {
             com.bitchat.android.ui.sos.EmergencySosTabScreen(connectedPeersCount = 4, modifier = Modifier.weight(1f))

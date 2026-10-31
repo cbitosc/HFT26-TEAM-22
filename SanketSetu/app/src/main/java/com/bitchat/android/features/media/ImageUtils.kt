@@ -11,6 +11,31 @@ import java.io.FileOutputStream
 import java.io.InputStream
 
 object ImageUtils {
+    /**
+     * A small JPEG preview that rides inside the media offer so the receiver sees the picture while the
+     * full file is still arriving. Squeezed until it fits [maxBytes] (the wire allows up to 16 KiB).
+     */
+    fun makeThumbnail(path: String, maxDim: Int = 96, maxBytes: Int = 6 * 1024): ByteArray {
+        return try {
+            val src = loadBitmapWithExifOrientation(path) ?: return ByteArray(0)
+            val scale = maxDim.toFloat() / maxOf(src.width, src.height)
+            val bmp = if (scale < 1f) {
+                Bitmap.createScaledBitmap(src, (src.width * scale).toInt().coerceAtLeast(1), (src.height * scale).toInt().coerceAtLeast(1), true)
+            } else src
+            var quality = 55
+            var bytes: ByteArray
+            do {
+                val out = java.io.ByteArrayOutputStream()
+                bmp.compress(Bitmap.CompressFormat.JPEG, quality, out)
+                bytes = out.toByteArray()
+                quality -= 10
+            } while (bytes.size > maxBytes && quality >= 15)
+            if (bytes.size <= maxBytes) bytes else ByteArray(0)
+        } catch (_: Exception) {
+            ByteArray(0)
+        }
+    }
+
     fun downscaleAndSaveToAppFiles(context: Context, uri: Uri, maxDim: Int = 512, quality: Int = 85): String? {
         return try {
             val resolver = context.contentResolver

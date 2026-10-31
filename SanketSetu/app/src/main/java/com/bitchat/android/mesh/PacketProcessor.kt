@@ -159,6 +159,7 @@ class PacketProcessor(private val myPeerID: String) {
             MessageType.LEAVE -> handleLeave(routed)
             MessageType.FRAGMENT -> handleFragment(routed)
             MessageType.REQUEST_SYNC -> handleRequestSync(routed)
+            MessageType.MEDIA_OFFER -> delegate?.handleMediaOffer(routed)
             else -> {
                 // Handle private packet types (address check required)
                 if (packetRelayManager.isPacketAddressedToMe(packet)) {
@@ -166,6 +167,8 @@ class PacketProcessor(private val myPeerID: String) {
                         MessageType.NOISE_HANDSHAKE -> handleNoiseHandshake(routed)
                         MessageType.NOISE_ENCRYPTED -> handleNoiseEncrypted(routed)
                         MessageType.FILE_TRANSFER -> handleMessage(routed)
+                        MessageType.MEDIA_REQUEST -> delegate?.handleMediaRequest(routed)
+                        MessageType.MEDIA_CHUNK -> delegate?.handleMediaChunk(routed)
                         else -> {
                             validPacket = false
                             Log.w(TAG, "Unknown message type: ${packet.type}")
@@ -329,7 +332,12 @@ interface PacketProcessorDelegate {
     fun handleLeave(routed: RoutedPacket)
     fun handleFragment(packet: BitchatPacket): BitchatPacket?
     fun handleRequestSync(routed: RoutedPacket)
-    
+
+    // Resumable media (SanketSetu). Default no-ops keep other implementers source compatible.
+    fun handleMediaOffer(routed: RoutedPacket) {}
+    fun handleMediaRequest(routed: RoutedPacket) {}
+    fun handleMediaChunk(routed: RoutedPacket) {}
+
     // Communication
     fun sendAnnouncementToPeer(peerID: String)
     fun sendCachedMessages(peerID: String)

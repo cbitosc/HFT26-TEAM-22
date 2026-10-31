@@ -10,6 +10,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ## [Unreleased]
 
 ### Added
+- Resumable offline media transfer (`:resqmesh-ai` `media/`, `:app` `features/media/MediaTransferCoordinator`): photos, voice notes and short clips above 24 KiB are addressed by SHA-256 (`blobHash`) and moved by a 3-way handshake (`MEDIA_OFFER` with a thumbnail of at most 16 KiB, `MEDIA_REQUEST` carrying a chunk bitmap, `MEDIA_CHUNK`). If Bluetooth drops, the receiver re-requests only the missing bits after 8 s (or at once when the neighbour reconnects) so a transfer cut at 50% continues from 50%, never from chunk 0; the bitmap is persisted so an app restart resumes too. A blob is accepted only if its full SHA-256 matches the offer. See `docs/RESUMABLE_MEDIA.md`.
+- Private media is sealed end to end: the chunk key travels only inside the Noise session (`NoisePayloadType.MEDIA_OFFER`) and each chunk is AES-256-GCM, so relays carry ciphertext and forged chunks are rejected on arrival.
+- Dual-lane transport: Bluetooth always carries offers, requests and small files; for files above 64 KiB the receiver can open an on-demand Wi-Fi/hotspot socket (`TcpLanLane`, one-time token) so chunks stream without jamming the Bluetooth channel. Falls back to Bluetooth automatically if the socket fails.
+- Content-addressed `BlobStore` (streaming, 96 MB cap with oldest-first eviction) so a peer never downloads a blob it already holds; `MediaTransferStrip` shows incoming transfers with their thumbnail, progress and lane above the message box.
+- Mesh map (Mesh tab, new Radar/Map switch; `MeshMapScreen`, `TopologyLayout` in `:resqmesh-ai`): offline picture of the multi-hop mesh built from announcement gossip, with you in the middle, one ring per relay hop, solid/dashed links for confirmed/one-sided reports, devices with no known route on an outer ring, and tap-to-trace route with relay names and a Chat button.
+- Tests: 35 media engine tests (resume at 50%, repeated loss, corrupt chunk, restart resume, private sealing, real-socket Wi-Fi lane and its Bluetooth fallback), 6 coordinator tests, 11 topology tests, 6 photo-caption tests.
+
 - 3-second press-and-hold Emergency SOS button (`SosHoldButton`) as the hero of the dedicated SOS HUB tab (`EmergencySosTabScreen`): circular progress ring, escalating vibration pulses (`SosHaptics`), releasing early aborts and sends nothing; completing the hold broadcasts a priority-0 packet at full TTL. Exposes an explicit "send now" TalkBack action for users who cannot sustain a hold
 - Zero-typing situation picker (`EmergencySosTabScreen`, `SosCategory` in `:resqmesh-ai`): Medical/Trauma, Trapped/Collapse, Rising Flood, Fire/Smoke, Supplies, I'm Safe; labels and screen text switch instantly between English, Hindi, Telugu and Tamil (`SosLanguage`, `SosText`). The wire carries a language-independent category code, so every reader sees the situation in their own language
 - Location sharing tiers chosen before sending (`LocationTier`, `SosLocation`): No GPS, Coarse (~1 km, coordinates rounded to 2 decimals before encoding) and Precise (5 decimals). If a tier is chosen but no GPS fix exists the SOS is sent without coordinates and the sender is told
@@ -33,6 +40,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - `docs/SOS_RESCUE_FEATURES.md` — design, wire format, trust model, limitations and the two-phone test checklist
 
 ### Changed
+- Photos, voice notes and clips over 24 KiB are sent through the resumable engine instead of one-shot `FILE_TRANSFER` (smaller files and generic documents keep the legacy path, which stock BitChat phones understand).
 - Typography: core text styles and ~180 explicit uses moved from monospace to the system sans family (debug tools and the ICS-213 form view stay monospace). The Material theme no longer sets text to terminal green
 - Chat: messages are rounded cards with the sender name in colour and the text in normal ink (previously the whole message was tinted with the sender's colour, orange for yourself); `<@name>` wrapper replaced by `name:`; timestamps are `[HH:mm]` (the proof-of-work animation regex accepts both formats); input is a rounded field with brand-coloured buttons and 44-48 dp touch targets (were 32 dp); slash-command and mention highlighting take theme colours
 - SOS tab: header with live nearby-devices pill, equal-height situation tiles, proper radio controls, token-based palette (`SosPalette` now follows light/dark)
@@ -42,6 +50,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - `MessageItem` renders SOS broadcasts as `SosMessageCard`
 
 ### Fixed
+- Photo reports no longer get unrelated captions: emergency labels need confidence of 0.6 and are matched as whole words ("member" no longer matches EMBER, "fireplace" no longer matches FIRE), the vision model needs 0.75 before its guess is used, and a photo nothing can place now says "Photo attached. Add a short note" instead of an invented description.
 - Alerts feed listed newest first, so CRITICAL alerts could sit below routine ones; it now orders critical, then high, then normal (newest first within each)
 - Alerts feed and ICS-213 report showed the raw `[[SOS1;...]]` machine tag for received SOS beacons; they now show the situation in plain language
 - Radar showed "Moderate (-70 dBm)" for peers with no signal reading (the value was defaulted); it now says "Signal unknown"

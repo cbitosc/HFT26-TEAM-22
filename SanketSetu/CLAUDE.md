@@ -65,6 +65,7 @@ docs/                   — Architecture specs (file_transfer.md, SOURCE_ROUTING
 | `features/file/` | File transfer logic |
 | `features/media/` | Media handling, `ImageSceneAnalyzer`, `ImageUtils` (vision pipeline orchestration) |
 | `sos/` | SOS coordinator: hold-to-send state, receipts/replies, responder certificate trust (`TrustAnchors`) — see `docs/SOS_RESCUE_FEATURES.md` |
+| `features/media/MediaTransferCoordinator` | Resumable media: packs engine offers/requests/chunks into mesh packets (`MEDIA_OFFER/REQUEST/CHUNK` = 0x40–0x42), delivers finished blobs as chat messages — see `docs/RESUMABLE_MEDIA.md` |
 | `ui/sos/` | SOS Compose UI: hold button, situation picker, tracker, SOS chat card |
 | `util/` | Extensions, constants, binary encoding |
 
@@ -79,6 +80,8 @@ docs/                   — Architecture specs (file_transfer.md, SOURCE_ROUTING
 | `emergency/` | `EmergencyClassification` — badge logic, category emoji/label helpers |
 | `report/` | ICS-213 FEMA report data classes and HTML generator |
 | `sos/` | SOS wire codec, tracker state machine, responder certificate verify, localized (EN/HI/TE/TA) content — pure Kotlin |
+| `media/` | Content-addressed blob store, bitmap-resumable chunk engine, per-chunk AEAD, Wi-Fi socket lane — pure JVM |
+| `topology/` | Mesh map layout (hop rings, routes) from gossip adjacency — pure Kotlin |
 
 ---
 

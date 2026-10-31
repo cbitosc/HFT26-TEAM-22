@@ -263,6 +263,34 @@ object FileUtils {
     }
 
     /**
+     * Moves (or copies) an already-assembled file into the incoming media folder without loading it into
+     * memory. Used by resumable transfers, which can be tens of megabytes.
+     */
+    fun adoptIncomingFile(
+        context: Context,
+        src: java.io.File,
+        mime: String,
+        suggestedName: String,
+        move: Boolean
+    ): String {
+        val isImage = mime.lowercase().startsWith("image/")
+        val dir = java.io.File(context.cacheDir, if (isImage) "images/incoming" else "files/incoming").apply { mkdirs() }
+        val safe = suggestedName.replace(Regex("[^A-Za-z0-9._-]"), "_")
+        var target = java.io.File(dir, safe)
+        var idx = 1
+        while (target.exists() && idx < 1000) {
+            val dot = safe.lastIndexOf('.')
+            target = java.io.File(dir, if (dot > 0) safe.substring(0, dot) + " ($idx)" + safe.substring(dot) else "$safe ($idx)")
+            idx++
+        }
+        if (!(move && src.renameTo(target))) {
+            src.inputStream().use { input -> target.outputStream().use { input.copyTo(it) } }
+            if (move) src.delete()
+        }
+        return target.absolutePath
+    }
+
+    /**
      * Classify BitchatMessageType from MIME string used in file messages.
      */
     fun messageTypeForMime(mime: String): com.bitchat.android.model.BitchatMessageType {

@@ -24,6 +24,16 @@ import androidx.compose.material.icons.filled.Radar
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
+import com.bitchat.android.services.meshgraph.MeshGraphService
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -71,7 +81,7 @@ enum class SignalBand(val label: String, val tone: Tone, val bars: Int, val ring
     }
 }
 
-/** Stateful entry point: reads live peers from the view-model. */
+/** The Mesh tab: nearby radio view or the multi-hop map. Both work with no internet. */
 @Composable
 fun MeshRadarTabScreen(
     viewModel: ChatViewModel,
@@ -81,10 +91,54 @@ fun MeshRadarTabScreen(
     val connectedPeers by viewModel.connectedPeers.collectAsStateWithLifecycle()
     val peerNicknames by viewModel.peerNicknames.collectAsStateWithLifecycle()
     val peerRSSI by viewModel.peerRSSI.collectAsStateWithLifecycle()
-    val peers = connectedPeers.map { id ->
-        RadarPeer(id = id, name = peerNicknames[id] ?: "Node ${id.take(6)}", rssi = peerRSSI[id])
+    var showMap by rememberSaveable { mutableStateOf(false) }
+
+    Column(modifier = modifier.fillMaxSize().background(Sanket.colors.paper)) {
+        MeshModeSwitch(showMap = showMap, onChange = { showMap = it })
+        if (showMap) {
+            val snapshot by remember { MeshGraphService.getInstance().graphState }.collectAsStateWithLifecycle()
+            val layout = remember(snapshot, connectedPeers, peerNicknames) {
+                buildMeshLayout(viewModel.meshService.myPeerID, snapshot, connectedPeers, peerNicknames)
+            }
+            MeshMapContent(layout = layout, onDirectChat = onDirectChat, modifier = Modifier.weight(1f))
+        } else {
+            val peers = connectedPeers.map { id ->
+                RadarPeer(id = id, name = peerNicknames[id] ?: "Node ${id.take(6)}", rssi = peerRSSI[id])
+            }
+            MeshRadarContent(peers = peers, onDirectChat = onDirectChat, modifier = Modifier.weight(1f))
+        }
     }
-    MeshRadarContent(peers = peers, onDirectChat = onDirectChat, modifier = modifier)
+}
+
+/** Two-way switch between the radio radar and the relay map. */
+@Composable
+private fun MeshModeSwitch(showMap: Boolean, onChange: (Boolean) -> Unit) {
+    val c = Sanket.colors
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 16.dp, end = 16.dp, top = 12.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(c.surfaceAlt)
+            .padding(4.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        for ((label, isMap) in listOf("Radar" to false, "Map" to true)) {
+            val on = showMap == isMap
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .heightIn(min = 44.dp)
+                    .clip(RoundedCornerShape(9.dp))
+                    .background(if (on) c.surface else Color.Transparent)
+                    .clickable(role = Role.Tab) { onChange(isMap) }
+                    .semantics { selected = on },
+                contentAlignment = Alignment.Center
+            ) {
+                Text(label, color = if (on) c.ink else c.muted, fontSize = 14.sp, fontWeight = if (on) FontWeight.Bold else FontWeight.Medium)
+            }
+        }
+    }
 }
 
 /** Stateless radar UI (kept separate so it can be rendered and tested without a view-model). */

@@ -125,6 +125,9 @@ object AppConstants {
 
     object Media {
         const val MAX_FILE_SIZE_BYTES: Long = 50L * 1024 * 1024
+
+        /** Files above this use the resumable, content-addressed transfer instead of one-shot FILE_TRANSFER. */
+        const val RESUMABLE_MIN_BYTES: Long = 24L * 1024
     }
 
     object Services {

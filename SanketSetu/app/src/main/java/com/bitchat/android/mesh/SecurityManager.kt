@@ -241,7 +241,8 @@ class SecurityManager(private val encryptionService: EncryptionService, private 
             if (MessageType.fromValue(packet.type) !in setOf(
                     MessageType.ANNOUNCE,
                     MessageType.MESSAGE,
-                    MessageType.FILE_TRANSFER
+                    MessageType.FILE_TRANSFER,
+                    MessageType.MEDIA_OFFER
                 )) {
                 return true
             }

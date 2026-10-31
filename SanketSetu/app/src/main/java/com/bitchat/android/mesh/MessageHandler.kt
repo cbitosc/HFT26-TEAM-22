@@ -111,6 +111,13 @@ class MessageHandler(private val myPeerID: String, private val appContext: andro
                     }
                 }
                 
+                com.bitchat.android.model.NoisePayloadType.MEDIA_OFFER -> {
+                    // SanketSetu resumable media: offer + chunk key arrive inside the Noise session
+                    try { delegate?.onPrivateMediaOffer(peerID, noisePayload.data) } catch (e: Exception) {
+                        Log.w(TAG, "Private media offer from $peerID rejected: ${e.message}")
+                    }
+                }
+
                 com.bitchat.android.model.NoisePayloadType.FILE_TRANSFER -> {
                     // Handle encrypted file transfer; generate unique message ID
                     val file = com.bitchat.android.model.BitchatFilePacket.decode(noisePayload.data)
@@ -642,6 +649,9 @@ interface MessageHandlerDelegate {
 
     // Callbacks
     fun onMessageReceived(message: BitchatMessage)
+
+    /** SanketSetu resumable media: a private offer, already decrypted by the Noise layer. */
+    fun onPrivateMediaOffer(peerID: String, data: ByteArray) {}
     fun onChannelLeave(channel: String, fromPeer: String)
     fun onDeliveryAckReceived(messageID: String, peerID: String)
     fun onReadReceiptReceived(messageID: String, peerID: String)

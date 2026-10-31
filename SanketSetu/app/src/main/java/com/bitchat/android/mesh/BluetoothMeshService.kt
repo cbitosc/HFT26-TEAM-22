@@ -89,6 +89,94 @@ class BluetoothMeshService(private val context: Context) {
             sendPriorityBroadcast(text, priority, ttl, syncable)
     }
 
+    // Resumable media (voice notes, photos, short clips). Packs the engine's offer/request/chunk messages
+    // into mesh packets; chunks and requests are unsigned (the content hash or per-chunk AEAD authenticates
+    // them) so each chunk fits one BLE write, and they ride at the lowest priority behind text and SOS.
+    private val mediaHost = object : com.bitchat.android.features.media.MediaMeshHost {
+        override val myPeerId: String get() = myPeerID
+        override fun peerNickname(peerId: String): String? = peerManager.getPeerNickname(peerId)
+        override fun myNickname(): String? = delegate?.getNickname()
+        override fun hasLinks(): Boolean = isActive && peerManager.getActivePeerIDs().isNotEmpty()
+        override fun isDirectPeer(peerId: String): Boolean = peerManager.getPeerInfo(peerId)?.isDirectConnection == true
+
+        override fun sendBroadcastOffer(payload: ByteArray) {
+            serviceScope.launch {
+                val packet = BitchatPacket(
+                    version = 1u,
+                    type = MessageType.MEDIA_OFFER.value,
+                    senderID = hexStringToByteArray(myPeerID),
+                    recipientID = SpecialRecipients.BROADCAST,
+                    timestamp = System.currentTimeMillis().toULong(),
+                    payload = payload,
+                    signature = null,
+                    ttl = MAX_TTL
+                )
+                connectionManager.broadcastPacket(RoutedPacket(signPacketBeforeBroadcast(packet), priority = 3))
+            }
+        }
+
+        override fun sendAddressed(type: MessageType, to: String, payload: ByteArray, direct: Boolean): Boolean {
+            if (!isActive) return false
+            val packet = BitchatPacket(
+                version = 1u,
+                type = type.value,
+                senderID = hexStringToByteArray(myPeerID),
+                recipientID = hexStringToByteArray(to),
+                timestamp = System.currentTimeMillis().toULong(),
+                payload = payload,
+                signature = null,
+                ttl = MAX_TTL
+            )
+            return if (direct) {
+                connectionManager.sendToPeer(to, RoutedPacket(packet, priority = 3))
+            } else {
+                connectionManager.broadcastPacket(RoutedPacket(withSourceRoute(packet), priority = 3))
+                true
+            }
+        }
+
+        override fun sendNoiseOffer(to: String, plaintext: ByteArray): Boolean {
+            if (!encryptionService.hasEstablishedSession(to)) {
+                messageHandler.delegate?.initiateNoiseHandshake(to)
+                return false // the engine re-offers every 30 s, by which time the session exists
+            }
+            serviceScope.launch {
+                val sealed = encryptionService.encrypt(
+                    com.bitchat.android.model.NoisePayload(com.bitchat.android.model.NoisePayloadType.MEDIA_OFFER, plaintext).encode(),
+                    to
+                ) ?: return@launch
+                val packet = BitchatPacket(
+                    version = 1u,
+                    type = MessageType.NOISE_ENCRYPTED.value,
+                    senderID = hexStringToByteArray(myPeerID),
+                    recipientID = hexStringToByteArray(to),
+                    timestamp = System.currentTimeMillis().toULong(),
+                    payload = sealed,
+                    signature = null,
+                    ttl = com.bitchat.android.util.AppConstants.MESSAGE_TTL_HOPS
+                )
+                connectionManager.broadcastPacket(RoutedPacket(signPacketBeforeBroadcast(packet), priority = 2))
+            }
+            return true
+        }
+
+        override fun deliver(message: BitchatMessage) {
+            messageHandler.delegate?.onMessageReceived(message)
+        }
+    }
+    val mediaTransfer = com.bitchat.android.features.media.MediaTransferCoordinator(
+        context.applicationContext, mediaHost, serviceScope
+    )
+
+    /** Attach a source route (intermediate hops only) to an addressed packet so it is not flooded. */
+    private fun withSourceRoute(packet: BitchatPacket): BitchatPacket = try {
+        val rec = packet.recipientID
+        val path = rec?.let { com.bitchat.android.services.meshgraph.RoutePlanner.shortestPath(myPeerID, it.joinToString("") { b -> "%02x".format(b) }) }
+        if (path != null && path.size >= 3) {
+            packet.copy(route = path.subList(1, path.size - 1).map { hexStringToByteArray(it) }, version = 2u)
+        } else packet
+    } catch (_: Exception) { packet }
+
     init {
         Log.i(TAG, "Initializing BluetoothMeshService for peer=$myPeerID")
         com.bitchat.android.sos.SosCoordinator.attach(context.applicationContext, sosBridge)
@@ -402,6 +490,10 @@ class BluetoothMeshService(private val context: Context) {
                 return delegate?.decryptChannelMessage(encryptedContent, channel)
             }
             
+            override fun onPrivateMediaOffer(peerID: String, data: ByteArray) {
+                mediaTransfer.onPrivateOffer(peerID, data)
+            }
+
             // Callbacks
             override fun onMessageReceived(message: BitchatMessage) {
                 // Always reflect into process-wide store so UI can hydrate after recreation
@@ -552,6 +644,20 @@ class BluetoothMeshService(private val context: Context) {
             
             override fun sendCachedMessages(peerID: String) {
                 storeForwardManager.sendCachedMessages(peerID)
+                // A neighbour is back: pull whatever is still missing from an interrupted media transfer
+                mediaTransfer.onPeerReconnected(peerID)
+            }
+
+            override fun handleMediaOffer(routed: RoutedPacket) {
+                routed.peerID?.let { mediaTransfer.onOfferPacket(it, routed.packet.payload) }
+            }
+
+            override fun handleMediaRequest(routed: RoutedPacket) {
+                routed.peerID?.let { mediaTransfer.onRequestPacket(it, routed.packet.payload) }
+            }
+
+            override fun handleMediaChunk(routed: RoutedPacket) {
+                routed.peerID?.let { mediaTransfer.onChunkPacket(it, routed.packet.payload) }
             }
             
             override fun relayPacket(routed: RoutedPacket) {
@@ -658,6 +764,7 @@ class BluetoothMeshService(private val context: Context) {
         
         if (connectionManager.startServices()) {
             isActive = true
+            mediaTransfer.start()
             
             // Start periodic announcements for peer discovery and connectivity
             sendPeriodicBroadcastAnnounce()
@@ -692,6 +799,7 @@ class BluetoothMeshService(private val context: Context) {
             // Stop all components
             gossipSyncManager.stop()
             Log.d(TAG, "GossipSyncManager stopped")
+            mediaTransfer.stop()
             connectionManager.stopServices()
             Log.d(TAG, "BluetoothConnectionManager stop requested")
             peerManager.shutdown()

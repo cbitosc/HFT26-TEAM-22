@@ -47,6 +47,9 @@ class MediaSendingManager(
                 return
             }
 
+            // Bigger clips go through the resumable, content-addressed engine: a dropped link resumes, never restarts.
+            if (sendResumableIfLarge(toPeerIDOrNull, channelOrNull, file, "audio/mp4", BitchatMessageType.Audio)) return
+
             val filePacket = BitchatFilePacket(
                 fileName = file.name,
                 fileSize = file.length(),
@@ -81,6 +84,8 @@ class MediaSendingManager(
                 Log.e(TAG, "❌ File too large: ${file.length()} bytes (max: $MAX_FILE_SIZE)")
                 return
             }
+
+            if (sendResumableIfLarge(toPeerIDOrNull, channelOrNull, file, "image/jpeg", BitchatMessageType.Image)) return
 
             val filePacket = BitchatFilePacket(
                 fileName = file.name,
@@ -118,6 +123,17 @@ class MediaSendingManager(
             if (file.length() > MAX_FILE_SIZE) {
                 Log.e(TAG, "❌ File too large: ${file.length()} bytes (max: $MAX_FILE_SIZE)")
                 return
+            }
+
+            // Generic files keep the one-shot path: the resumable offer only carries a coarse media tag.
+            run {
+                val mime = try { com.bitchat.android.features.file.FileUtils.getMimeTypeFromExtension(file.name) } catch (_: Exception) { "application/octet-stream" }
+                val type = when {
+                    mime.lowercase().startsWith("image/") -> BitchatMessageType.Image
+                    mime.lowercase().startsWith("audio/") -> BitchatMessageType.Audio
+                    else -> BitchatMessageType.File
+                }
+                if (sendResumableIfLarge(toPeerIDOrNull, channelOrNull, file, mime, type)) return
             }
 
             // Use the real MIME type based on extension; fallback to octet-stream
@@ -270,10 +286,100 @@ class MediaSendingManager(
         Log.d(TAG, "✅ File broadcast completed successfully")
     }
 
+    // Resumable transfers: blob hash <-> chat message, so progress and cancel reach the right bubble.
+    private val resumableHashToMessage = mutableMapOf<String, String>()
+    private val resumableMessageToHash = mutableMapOf<String, String>()
+
+    /**
+     * Sends [file] through the resumable engine when it is big enough and of a media type the offer can
+     * describe. Returns false to let the caller use the legacy one-shot path.
+     */
+    private fun sendResumableIfLarge(
+        toPeerID: String?,
+        channel: String?,
+        file: java.io.File,
+        mime: String,
+        type: BitchatMessageType
+    ): Boolean {
+        if (file.length() <= com.bitchat.android.util.AppConstants.Media.RESUMABLE_MIN_BYTES) return false
+        if (com.bitchat.android.ai.media.MimeTag.fromMime(mime) == com.bitchat.android.ai.media.MimeTag.OCTET) return false
+
+        val me = meshService.myPeerID
+        val msg = if (toPeerID != null) {
+            BitchatMessage(
+                id = java.util.UUID.randomUUID().toString().uppercase(),
+                sender = state.getNicknameValue() ?: "me",
+                content = file.absolutePath,
+                type = type,
+                timestamp = Date(),
+                isRelay = false,
+                isPrivate = true,
+                recipientNickname = try { meshService.getPeerNicknames()[toPeerID] } catch (_: Exception) { null },
+                senderPeerID = me
+            )
+        } else {
+            BitchatMessage(
+                id = java.util.UUID.randomUUID().toString().uppercase(),
+                sender = state.getNicknameValue() ?: me,
+                content = file.absolutePath,
+                type = type,
+                timestamp = Date(),
+                isRelay = false,
+                senderPeerID = me,
+                channel = channel
+            )
+        }
+        when {
+            toPeerID != null -> messageManager.addPrivateMessage(toPeerID, msg)
+            !channel.isNullOrBlank() -> channelManager.addChannelMessage(channel, msg, me)
+            else -> messageManager.addMessage(msg)
+        }
+        messageManager.updateMessageDeliveryStatus(msg.id, com.bitchat.android.model.DeliveryStatus.PartiallyDelivered(0, 100))
+
+        val coordinator = meshService.mediaTransfer
+        coordinator.sendProgress = { hash, served, total, _ -> onResumableProgress(hash, served, total) }
+        val thumb = if (type == BitchatMessageType.Image) {
+            com.bitchat.android.features.media.ImageUtils.makeThumbnail(file.absolutePath)
+        } else ByteArray(0)
+        Log.d(TAG, "📤 Resumable media: ${file.name} (${file.length()} bytes) to ${toPeerID?.take(8) ?: "mesh"}")
+        coordinator.send(file, mime, toPeerID, thumb) { hash ->
+            if (hash == null) {
+                messageManager.updateMessageDeliveryStatus(msg.id, com.bitchat.android.model.DeliveryStatus.Failed("Could not prepare file"))
+            } else {
+                synchronized(resumableHashToMessage) {
+                    resumableHashToMessage[hash] = msg.id
+                    resumableMessageToHash[msg.id] = hash
+                }
+                // A public offer has no single receiver to count; it is on the air once offered.
+                if (toPeerID == null) {
+                    messageManager.updateMessageDeliveryStatus(msg.id, com.bitchat.android.model.DeliveryStatus.Sent)
+                }
+            }
+        }
+        return true
+    }
+
+    private fun onResumableProgress(hash: String, served: Int, total: Int) {
+        val msgId = synchronized(resumableHashToMessage) { resumableHashToMessage[hash] } ?: return
+        val status = if (served >= total) {
+            com.bitchat.android.model.DeliveryStatus.Sent
+        } else {
+            com.bitchat.android.model.DeliveryStatus.PartiallyDelivered(served, total)
+        }
+        messageManager.updateMessageDeliveryStatus(msgId, status)
+    }
+
     /**
      * Cancel a media transfer by message ID
      */
     fun cancelMediaSend(messageId: String) {
+        val resumableHash = synchronized(resumableHashToMessage) { resumableMessageToHash.remove(messageId) }
+        if (resumableHash != null) {
+            synchronized(resumableHashToMessage) { resumableHashToMessage.remove(resumableHash) }
+            meshService.mediaTransfer.cancel(resumableHash)
+            messageManager.removeMessageById(messageId)
+            return
+        }
         val transferId = synchronized(transferMessageMap) { messageTransferMap[messageId] }
         if (transferId != null) {
             val cancelled = meshService.cancelFileTransfer(transferId)

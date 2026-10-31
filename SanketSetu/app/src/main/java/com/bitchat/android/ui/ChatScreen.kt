@@ -56,6 +56,7 @@ fun ChatScreen(viewModel: ChatViewModel) {
     val chatScreenContext = androidx.compose.ui.platform.LocalContext.current
     val messages by viewModel.messages.collectAsStateWithLifecycle()
     val connectedPeers by viewModel.connectedPeers.collectAsStateWithLifecycle()
+    val mediaTransfers by viewModel.meshService.mediaTransfer.transfers.collectAsStateWithLifecycle()
     val nickname by viewModel.nickname.collectAsStateWithLifecycle()
     val selectedPrivatePeer by viewModel.selectedPrivateChatPeer.collectAsStateWithLifecycle()
     val currentChannel by viewModel.currentChannel.collectAsStateWithLifecycle()
@@ -304,7 +305,8 @@ fun ChatScreen(viewModel: ChatViewModel) {
                         currentChannel = currentChannel,
                         nickname = nickname,
                         colorScheme = colorScheme,
-                        showMediaButtons = showMediaButtons
+                        showMediaButtons = showMediaButtons,
+                        mediaTransfers = mediaTransfers.values.toList()
                     )
                 }
                 MainScreenTab.SOS -> {
@@ -547,13 +549,15 @@ fun ChatInputSection(
     currentChannel: String?,
     nickname: String,
     colorScheme: ColorScheme,
-    showMediaButtons: Boolean
+    showMediaButtons: Boolean,
+    mediaTransfers: List<com.bitchat.android.features.media.MediaTransferUi> = emptyList()
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
         color = colorScheme.background
     ) {
         Column {
+            com.bitchat.android.ui.media.MediaTransferStrip(mediaTransfers)
             HorizontalDivider(color = colorScheme.outline.copy(alpha = 0.3f))
             // Command suggestions box
             if (showCommandSuggestions && commandSuggestions.isNotEmpty()) {

@@ -39,13 +39,21 @@ object SceneToEmergencyMapper {
      *
      * @param labels Pairs of (ML Kit label text, confidence), sorted descending by confidence.
      */
+    /** Below this a label is a guess, and a wrong emergency tag on a photo is worse than none. */
+    const val MIN_EMERGENCY_CONFIDENCE = 0.6f
+    /** Below this a label is not even worth showing as a description. */
+    const val MIN_DESCRIBE_CONFIDENCE = 0.7f
+
+    /** Caption for a photo the models could not place with confidence. The sender is asked to describe it. */
+    const val UNCLEAR_DESCRIPTION = "[📷] Photo attached. Add a short note so people know what it shows."
+
     fun mapLabels(labels: List<Pair<String, Float>>): SceneAnalysisResult {
         if (labels.isEmpty()) return SceneAnalysisResult("", "", 0f)
 
         for ((label, confidence) in labels) {
-            val upper = label.uppercase()
+            if (confidence < MIN_EMERGENCY_CONFIDENCE) continue
             val emergencyType = LABEL_TO_CATEGORY.entries
-                .firstOrNull { (keyword, _) -> upper.contains(keyword) }
+                .firstOrNull { (keyword, _) -> containsWords(label, keyword) }
                 ?.value
 
             if (emergencyType != null) {
@@ -59,12 +67,19 @@ object SceneToEmergencyMapper {
             }
         }
 
-        // Labels found but none matched a known emergency category — generic description.
-        // Caller will populate the TextField so the user can review and complete the report.
-        val topLabels = labels.take(4)
-            .joinToString(", ") { it.first.lowercase() }
-            .replaceFirstChar { it.uppercase() }
-        return SceneAnalysisResult("[📷]: $topLabels.", "", labels.first().second)
+        // Nothing matched an emergency category. Describe the photo only with labels we are fairly sure of;
+        // otherwise say so honestly instead of captioning it with something unrelated.
+        val sure = labels.filter { it.second >= MIN_DESCRIBE_CONFIDENCE }.take(4)
+        if (sure.isEmpty()) return SceneAnalysisResult(UNCLEAR_DESCRIPTION, "", labels.first().second)
+        val topLabels = sure.joinToString(", ") { it.first.lowercase() }.replaceFirstChar { it.uppercase() }
+        return SceneAnalysisResult("[📷]: $topLabels.", "", sure.first().second)
+    }
+
+    /** Whole-word containment, so "EMBER" never matches "member" and "FIRE" never matches "fireplace". */
+    internal fun containsWords(label: String, keyword: String): Boolean {
+        val l = " " + label.uppercase().replace(Regex("[^A-Z0-9]+"), " ").trim() + " "
+        val k = " " + keyword.uppercase().replace(Regex("[^A-Z0-9]+"), " ").trim() + " "
+        return l.contains(k)
     }
 
     // ── Label keyword → emergency category ────────────────────────────────────

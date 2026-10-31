@@ -20,7 +20,7 @@ private const val TAG = "ImageSceneAnalyzer"
  * Strategy:
  *  1. **TFLite** — custom emergency vision model ([VisionTFLiteClassifier]).
  *     If the model asset is present and returns a confident emergency prediction
- *     (confidence >= 0.55, non-"normal"), that result is used immediately.
+ *     (confidence >= 0.75, non-"normal"), that result is used immediately.
  *  2. **ML Kit** (fallback) — bundled Image Labeling, fully offline.
  *     Used when TFLite is unavailable, returns "normal", or is below threshold.
  *
@@ -28,6 +28,12 @@ private const val TAG = "ImageSceneAnalyzer"
  * corrected before the image reaches either model.
  */
 object ImageSceneAnalyzer {
+
+    /**
+     * The vision model only knows five scene classes, so for any other photo it still picks the nearest one.
+     * Requiring high confidence stops an unrelated picture being tagged with an emergency it does not show.
+     */
+    private const val TFLITE_MIN_CONFIDENCE = 0.75f
 
     /**
      * @param context  Android context (required by models and [InputImage]).
@@ -48,7 +54,7 @@ object ImageSceneAnalyzer {
                     val tfliteResult = classifier.classify(bitmap)
                     classifier.close()
 
-                    if (tfliteResult.emergencyType.isNotEmpty() && tfliteResult.confidence >= 0.55f) {
+                    if (tfliteResult.emergencyType.isNotEmpty() && tfliteResult.confidence >= TFLITE_MIN_CONFIDENCE) {
                         Log.d(TAG, "TFLite result accepted: ${tfliteResult.emergencyType} (${tfliteResult.confidence})")
                         bitmap.recycle()
                         return tfliteResult

@@ -190,7 +190,8 @@ class NostrDirectMessageHandler(
                 }
             }
             NoisePayloadType.VERIFY_CHALLENGE,
-            NoisePayloadType.VERIFY_RESPONSE -> Unit // Ignore verification payloads in Nostr direct messages
+            NoisePayloadType.VERIFY_RESPONSE,
+            NoisePayloadType.MEDIA_OFFER -> Unit // Verification and Bluetooth-only resumable-media offers are not carried over Nostr
         }
     }
 
