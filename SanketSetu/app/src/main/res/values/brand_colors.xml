@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- SanketSetu brand palette (from the project logo) -->
+    <color name="sanketsetu_cream">#F6F4EF</color>
+    <color name="sanketsetu_ink">#0B0B0B</color>
+    <color name="sanketsetu_blue">#2D5BFF</color>
+    <color name="sanketsetu_violet">#B79CFF</color>
+    <color name="sanketsetu_coral">#FF6A4D</color>
+</resources>
