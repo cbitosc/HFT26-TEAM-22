@@ -1,204 +1,501 @@
-# Sanket Setu
+# SanketSetu
 
-**Offline emergency messaging and SOS over a phone-to-phone mesh.** *Setu* means bridge: when towers
-and internet fail, nearby phones become the bridge. Works with no internet or cell signal.
+> **An open-source Android platform applying on-device machine learning to emergency communication over offline BLE mesh networks for disaster response.**
 
-Team Astra · CBIT Hacktoberfest '26 · HFT26-TEAM-22 · MIT license
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
+[![Platform](https://img.shields.io/badge/Platform-Android%208.0%2B-green.svg)](https://developer.android.com)
+[![Language](https://img.shields.io/badge/Language-Kotlin-orange.svg)](https://kotlinlang.org)
+[![Status](https://img.shields.io/badge/Status-Active%20Research-yellow.svg)]()
 
-<p>
-  <img src="docs/screenshots/home.png" width="180" alt="Home with the SOS hold button">
-  <img src="docs/screenshots/sos.png" width="180" alt="SOS composer with pictograms">
-  <img src="docs/screenshots/simulator-benchmark.png" width="180" alt="Congestion benchmark, simulated">
-  <img src="docs/screenshots/mesh-quality.png" width="180" alt="Mesh quality screen">
-</p>
 
-## 1. Problem
+<img width="216" height="444" alt="Screen_2" src="https://github.com/user-attachments/assets/168ed689-c291-4f0f-8e14-a34ef299dec4" />
+<img width="216" height="444" alt="Screen_2" src="https://github.com/user-attachments/assets/f3040038-c0a7-4957-90d9-21021ed32a67" />
+<img width="216" height="456" alt="Screen_3" src="https://github.com/user-attachments/assets/3ce837c9-6de1-4c57-8845-7e464a395f98" />
 
-In disasters and outages, cell towers and internet go down exactly when people most need to reach
-each other. Survivors cannot tell whether an SOS was heard, and plain Bluetooth broadcast tools do
-not authenticate who answers or protect exact locations. We need messaging that works with no
-network, reaches people out of direct range, puts emergencies first, shows what actually happened to
-each message, stays alive on a draining battery, and cannot be read or forged by bystanders.
 
-## 2. Solution
+---
 
-An Android app (React + Capacitor) with an on-device mesh engine and a Kotlin foreground service
-that uses Google Nearby Connections (Bluetooth + Wi-Fi Direct). There is no server. Messages and
-SOS beacons are signed and encrypted, flooded across phones within range, queued when nobody is
-reachable, and re-sent until delivery is confirmed. An optional online AI assistant can summarize,
-translate and suggest alert order. It never blocks the app and never decides for the user.
+## Overview
 
-## 3. Architecture
+**SanketSetu** (formerly ResQMesh AI Platform) is a research-driven Android platform built on top of the [BitChat](https://github.com/permissionlesstech/bitchat-android) open-source BLE mesh messaging protocol. It extends core mesh communication with an **on-device AI layer** specifically designed for disaster response scenarios where internet infrastructure is unavailable or destroyed.
 
-```mermaid
-flowchart LR
-  UI["UI (React screens, Zustand store)"] --> ENG["Mesh engine (TypeScript)\npriority queues, flooding, outbox, sync,\nsignatures, encryption, delivery state"]
-  ENG --> CT["CompositeTransport"]
-  CT --> NT["NearbyTransport (Capacitor plugin)"]
-  CT --> ST["SimTransport (in-app demo mesh)"]
-  NT --> SVC["Kotlin foreground service\nNearbyMeshPlugin, ConnectionManager,\nRelayCore (header-only relay)"]
-  SVC --> RAD["Bluetooth / BLE / Wi-Fi Direct radios"]
-  ENG --> DB[("Dexie / IndexedDB\noutbox, own messages, seen-cache")]
-  UI -. optional, online only .-> AI["Featherless.ai (Zod-validated, advisory)"]
+During natural disasters — hurricanes, earthquakes, wildfires — traditional communication infrastructure fails precisely when it is needed most. This platform addresses that critical gap by combining:
+
+- **Decentralized BLE mesh networking** — no internet, no servers, no single point of failure
+- **On-device AI inference** — intelligent decisions made locally, without cloud dependency
+- **FEMA-compatible reporting** — outputs aligned with U.S. federal emergency management standards
+
+This project directly supports U.S. national priorities in **emergency preparedness**, **disaster resilience**, and **critical communication infrastructure** as identified in the White House 2024 Critical and Emerging Technologies List under *Integrated Communication and Networking Technologies*.
+
+---
+
+## The Problem
+
+In disaster zones, communication breakdown is one of the leading causes of preventable casualties. Existing solutions have critical limitations:
+
+| Problem | Current State | SanketSetu Approach |
+|---|---|---|
+| Message overload | All messages treated equally | AI prioritizes by criticality |
+| Injured/disabled users | Text-only input | Offline speech recognition |
+| No situational overview | Manual data collection | Auto-generated FEMA reports |
+| Battery drain | Always-on radio | AI-driven adaptive energy management |
+| No coordinator tools | Raw message feeds | Structured incident summaries |
+| Image reporting over BLE | Full image transfer (~500 KB) saturates BLE bandwidth | On-device scene analysis converts photo to compact text report (~100 bytes) |
+
+---
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────┐
+│              SanketSetu                             │
+├─────────────────────────────────────────────────────┤
+│  [M1] AI Message        │  [M2] Offline Speech      │
+│  Priority Classifier    │  Recognition (STT)        │
+│  dual-Conv1D INT8       │  Vosk Android             │
+│  1,137 KB · F1=0.92     │  10–15% WER · <300ms      │
+├─────────────────────────────────────────────────────┤
+│  [M3] FEMA ICS-213      │  [M4] AI Energy           │
+│  Report Generator       │  Optimizer                │
+│  Situation awareness    │  +16–57% node survival    │
+├─────────────────────────────────────────────────────┤
+│  [M5] Photo Scene Analysis — MobileNetV2 TFLite     │
+│  macro-F1=0.98 · 7,869× BW reduction · 24.5–87.9ms  │
+│  Photo → on-device classification → text report     │
+│  Eliminates image transfer over BLE                 │
+├─────────────────────────────────────────────────────┤
+│           BitChat BLE Mesh Protocol Layer           │
+│     (Bluetooth LE · Noise Protocol · Multi-hop)     │
+└─────────────────────────────────────────────────────┘
 ```
 
-- `src/core/protocol/constants.ts`: every TTL, jitter, window and threshold in one file.
-- `src/mesh`, `src/crypto`, `src/transport`, `src/db`: core logic. An architecture test fails the build if these import UI code.
-- `plugins/nearby-mesh/android`: Kotlin plugin and foreground service.
-- **Real vs Demo mode.** The app starts in **Real** mode on a phone: the only transport is the Nearby
-  radio, and peers, messages, alerts and stats come only from real engine events. **Demo** mode (Settings,
-  "Demo", plus the Simulator screen) is the only place simulated phones and fixtures exist, and it shows a
-  permanent amber "DEMO MODE: simulated phones, not real" banner. The status strip always says `REAL RADIO` or `DEMO`.
+### Gradle Module Structure
 
-## 4. Requirement traceability
+The project uses a multi-module Gradle build to cleanly separate AI concerns from the core application:
 
-| # | Requirement | Where | Verified how |
-| --- | --- | --- | --- |
-| 1 | Offline communication | No network calls in `src/mesh`, `src/crypto`, `src/transport`; AI is the only network code | Architecture test; unit tests run with no network |
-| 2 | P2P over local radios | `NearbyTransport`, `NearbyMeshPlugin.kt`, `ConnectionManager.kt` | Compiles (debug APK built earlier). **Two-phone delivery UNVERIFIED** |
-| 3 | Multi-hop relay | `engine.maybeRelayPacket`, `RelayCore.kt` | Tests 4, 12 (A to B to C to D, TTL expiry) on loopback/simulated transport. **Real multi-hop UNVERIFIED** |
-| 4 | SOS with location if permitted | `engine.broadcastSOS`, `sealedLocation.ts` | Tests 6, 9 (none / coarse / precise sealed to responder key) |
-| 5 | Priority for SOS/emergency | `priority.ts` (P0 to P3, strict order) | Tests 7, 25 |
-| 6 | Delivery status | `MessageDeliveryState`, `DeliveryBridge` | Tests 4, 14 (forged ACK ignored) |
-| 7 | Encryption + authentication | `crypto/*`, PIN vault | Tests 1, 2, 10, 13, 16 |
-| 8 | Battery efficiency | `power.ts`, native duty-cycling in `NearbyMeshPlugin.kt` | Schedule math tested. **On-device battery effect UNVERIFIED** |
-| 9 | Recovery and sync | `outbox.ts`, `sync.ts`, retry loop, Dexie restore | Tests 5, 21, 22a, 22b, 23, 24 |
-| AI | Optional assistant | `src/ai/*` | Tests 19, 20 (offline falls back, never throws) |
-
-Extras: closed-loop SOS tracker, responder certificates and sealed GPS, safety circles, signed hazard
-beacons with expiry, alerts (sort, 200 m clustering, rule-based hint), SOS pictograms (EN/HI/TE/TA),
-packet inspector, 4-node simulator with congestion benchmark, mesh map, Mesh Quality screen, Setu
-gateway (DEMO), Rescuer Locate (EXPERIMENTAL, simulated).
-
-## 5. Packet format
-
-JSON envelope, at most 4096 bytes. Types: `HELLO, MSG, SOS, SOS_ACK, SAFE, HAZARD, ACK, SYNC_INV, SYNC_REQ`.
-
-```json
-{
-  "v": 1, "id": "<32 hex chars (16 random bytes)>", "type": "MSG", "prio": 2,
-  "ttl": 8, "hops": 0,
-  "src": "<8 hex node id>", "srcSignPub": "<base64 Ed25519>", "srcBoxPub": "<base64 X25519>",
-  "dst": "<node id or BROADCAST>", "ts": 1760000000000,
-  "nonce": "<base64, 24 bytes>", "payload": "<base64 ciphertext>",
-  "route": ["<relay ids, appended by relays>"], "sig": "<base64 Ed25519 detached>"
-}
+```
+:app                        — Android application (UI, mesh, crypto, routing)
+:resqmesh-ai            — All AI/ML functionality (self-contained library)
+    ├── ai/classifier/      — Message priority classification
+    │     ├── KeywordMessageClassifier   (~90 FEMA/ICS keywords across 9 categories + NONE, always available)
+    │     ├── TFLiteMessageClassifier    (neural model, activated by dropping .tflite asset)
+    │     ├── CompositeMessageClassifier (keyword-first → TFLite fallback pipeline)
+    │     └── MessageClassifierFactory   (selects best available backend at runtime)
+    ├── ai/emergency/       — Emergency badge predicates and category label helpers
+    │     └── EmergencyClassification    (shouldShowEmergencyBadge, categoryEmojiAndLabel)
+    ├── ai/energy/          — Battery-aware relay policy (no Android SDK dependency)
+    │     ├── EnergyMode                 (PERFORMANCE / BALANCED / POWER_SAVER / ULTRA_LOW_POWER)
+    │     └── EnergyRelayPolicy          (networkFactor × energyMultiplier; critical relay floor ≥0.20)
+    ├── ai/report/          — FEMA ICS-213 report data and HTML generator
+    │     ├── ICS213ReportData           (structured data classes for the ICS-213 form)
+    │     └── ICS213ReportGenerator      (pure HTML renderer, no Android deps, unit-testable)
+    ├── ai/voice/           — Offline STT (Vosk), voice recording, waveform tools
+    └── ai/vision/          — Photo scene analysis and label-to-category mapping
+          └── SceneToEmergencyMapper   (ML Kit label strings → 9 emergency categories + description text)
 ```
 
-The signature covers only `v, id, type, prio, src, srcSignPub, srcBoxPub, dst, ts, nonce, payload`.
-`ttl`, `hops` and `route` change at every relay, so relays never re-sign and `route` is an
-**unauthenticated hint**.
+The `:resqmesh-ai` module is an Android library with no dependency on `:app`, keeping AI code independently testable and reusable.
 
-## 6. Parameters
+---
 
-| Parameter | Value |
-| --- | --- |
-| TTL | 8 (SOS and SOS ACK: 12) |
-| Relay jitter | 10-50 ms (SOS 0-10 ms); forward cancelled if heard from 2 or more neighbours |
-| Replay window | +/- 5 minutes, plus seen-id check |
-| Seen-cache | about 1 hour, capped at 4096 ids, persisted |
-| Outbox backoff | 1 s doubling to a 30 s cap; retried on every peer found and at app start |
-| Queues | P0 SOS, P1 emergency, P2 normal, P3 info/ACK; P3 then P2 dropped first under congestion or Saver |
-| Battery modes | Balanced below 30% (10 s scan on / 20 s off), Saver below 15% (5 s on / 45 s off, SOS and emergency only), Last-Gasp SOS at 5% or less |
-| Scan backoff | doubles up to 60 s with no peers, resets when a peer appears |
-| Concurrent links | cap of 4, least-recently-active idle link rotated out |
+## Core Modules
 
-## 7. Security summary
+### M1 — AI Message Priority Classifier
 
-TweetNaCl only: Ed25519 signatures; X25519 + XSalsa20-Poly1305 (`nacl.box` / `nacl.secretbox`).
-Direct messages are end-to-end encrypted. SOS broadcasts use a shared channel key (it only deters
-casual snooping). Precise SOS location is sealed to the responder group key with an ephemeral
-`nacl.box`; everyone else sees about 1 km. First-contact keys are trusted on first use with a
-key-change warning, or verified by QR. Responder acknowledgements count only with a valid authority
-certificate (the authority in this build is a **DEMO** authority).
+Classifies incoming mesh messages into priority tiers and emergency categories using a two-stage on-device pipeline. In a disaster zone, not all messages are equal — a medical emergency must reach rescue coordinators before routine check-in messages.
 
-Private keys are encrypted at rest. With a PIN, the vault key is derived from it and kept only in
-memory, so the keys cannot be opened without the PIN. Without a PIN (skippable, with a warning) a
-random key stored on the device is used, which only protects against accidental exposure. Full threat
-model and limits: [docs/SECURITY.md](docs/SECURITY.md).
+> **Language support:** The classifier currently supports **English only**. Both the keyword rules and the TFLite model vocabulary are English-based. Multi-language classification is planned for a future release.
 
-## 8. Setup
+**Priority levels:**
+- `CRITICAL` — Medical emergencies, SOS signals, structural collapse reports
+- `HIGH` — Fire, flood, active security threats
+- `NORMAL` — Infrastructure issues, weather hazards, missing persons, resource requests
+- `NONE` — Routine check-ins, test messages, non-emergency content
+
+**9 recognised emergency categories + NONE:**
+
+| Category | Examples |
+|---|---|
+| 🏥 MEDICAL | "need a doctor", "heart attack", "injured", "SOS" |
+| 🏚 COLLAPSE | "building collapsed", "trapped under rubble" |
+| 🔥 FIRE | "fire spreading", "smoke", "evacuate now" |
+| 🌊 FLOOD | "flooding", "water rising", "dam broke" |
+| 🚨 SECURITY | "armed", "shooting", "threat", "danger" |
+| ⛈ WEATHER | "tornado", "hurricane", "storm warning" |
+| 🔍 MISSING PERSON | "can't find my kid", "missing person", "where is my" |
+| 🔧 INFRASTRUCTURE | "power outage", "no water", "bridge down" |
+| 📦 RESOURCES | "need food", "no supplies", "starving" |
+
+**Two-stage classifier pipeline (`CompositeMessageClassifier`):**
+1. **`KeywordMessageClassifier`** — ~90 FEMA/ICS keyword rules run first. If a `CRITICAL` or `HIGH` priority keyword matches, the result is returned immediately with deterministic, high-confidence output — bypassing the confidence threshold entirely.
+2. **`TFLiteMessageClassifier`** — Lightweight **dual-Conv1D** neural model (following Kim 2014 CNN architecture) runs as fallback for messages that don't match keywords. Confidence threshold: 25%.
+
+`MessageClassifierFactory` selects `CompositeMessageClassifier` (keyword + TFLite) when a model asset is present, or `KeywordMessageClassifier` alone otherwise, ensuring the system degrades gracefully on constrained hardware.
+
+**Model specifications:**
+- Architecture: parallel Conv1D branches (kernel sizes 3 and 5) with additive fusion + sequential Conv1D layer + GlobalMaxPooling + Dense
+- Quantization: INT8 via TFLite concrete function tracing
+- Model size: **1,137 KB**
+- Vocabulary: 5,000-token cap, **2,979 active tokens**
+- Training corpus: **2,700 messages** (270 per category × 10 categories), FEMA/ICS-derived, iteratively cleaned to remove duplicates and cross-category leakage
+- Train/val/test split: 70/15/15 stratified, random_state=42
+- Optimizer: Adam (lr=5×10⁻⁴), 80 epochs, early stopping patience=15
+
+**Evaluation results (held-out test set, N=405):**
+
+| Category | Precision | Recall | F1 |
+|---|---|---|---|
+| COLLAPSE | 0.93 | 0.93 | 0.93 |
+| FIRE | 0.91 | 0.98 | 0.94 |
+| FLOOD | 0.86 | 0.90 | 0.88 |
+| INFRASTRUCTURE | 0.90 | 0.85 | 0.88 |
+| MEDICAL | 0.88 | 0.88 | 0.88 |
+| MISSING PERSON | 0.91 | 0.98 | 0.94 |
+| RESOURCE REQ. | 0.97 | 0.93 | 0.95 |
+| SECURITY | 0.97 | 0.90 | 0.94 |
+| WEATHER | 0.91 | 0.95 | 0.93 |
+| **Macro avg** | **0.92** | **0.92** | **0.92** |
+
+**Ablation study:**
+
+| Configuration | Macro-F1 |
+|---|---|
+| Keyword only | 0.60 |
+| Neural only (no keyword stage) | 0.916 |
+| **Composite (ours)** | **0.920** |
+
+The keyword stage contributes a 0.004 F1 gain over neural-only, but provides two architectural benefits: (1) deterministic CRITICAL classification without a confidence threshold; (2) graceful degradation to keyword-only mode (F1=0.60) when the TFLite asset is unavailable.
+
+**Out-of-domain generalization:**
+Zero-shot evaluation on 120 crisis-style messages (authored to mimic crisis Twitter register per CrisisLex26 taxonomy, unseen during training): **macro-F1=0.87** (mean confidence 0.92) — a 0.05 domain gap versus the held-out test set.
+
+**Inference latency (CPU-only TFLite Interpreter, 200 runs after 10 warm-up discards):**
+
+| Device | SoC | Android | Mean latency | P95 latency | P99 latency | Max latency |
+| --- | --- | --- | --- | --- | --- | --- |
+| Pixel 9 Pro | Tensor G4 | 16 | 0.19 ms | 0.20 ms | 0.20 ms | 0.26 ms |
+| Samsung Galaxy S10 | Snapdragon 855 | 12 | 0.38 ms | 0.40 ms | 0.46 ms | 0.46 ms |
+| Pixel 3a | Snapdragon 670 | 11 | 1.97 ms | 2.12 ms | 2.17 ms | 2.19 ms |
+
+All devices achieve sub-2 ms inference — negligible relative to BLE transmission delays across the Android hardware spectrum from 2019 mid-range to 2024 flagship.
+
+**Real-time visual indicators in the chat UI:**
+- Each classified message shows a **coloured left stripe** matching its category (e.g., red for MEDICAL, orange for FIRE, blue for FLOOD).
+- An **emoji badge** below the message text confirms the detected category and confidence score (e.g., `🏥 MEDICAL · 94%`).
+- Classification runs in the background on `Dispatchers.Default` so TFLite never blocks the UI thread.
+- Results are cached per message ID — each message is classified exactly once.
+
+**Emergency Feed:**
+- A persistent **🚨 button** in the input bar opens the Emergency Feed.
+- The **Emergency Feed sheet** groups all detected emergency messages by category, sorted by priority (CRITICAL → HIGH → NORMAL), with a coloured stripe and message count per category.
+- Tapping a category opens a **full-screen Category View** showing only messages of that type, with system back-button navigation support.
+
+**Why it matters:** Rescue coordinators receiving hundreds of messages simultaneously cannot manually triage. AI prioritization directly reduces response time for life-threatening situations.
+
+---
+
+### M2 — Offline Speech Recognition (STT)
+
+Enables voice-to-text message input without internet connectivity, using on-device speech recognition.
+
+**Implementation:** [Vosk Android](https://alphacephei.com/vosk/android) — lightweight (~50 MB), supports Android 5.0+, 20+ languages, works fully offline on any device.
+
+**Performance:** 10–15% WER on standard benchmarks, streaming latency under 300 ms.
+
+**Use cases:**
+- Users with hand injuries cannot type
+- Dark environments where screen visibility is limited
+- Panic situations where voice is faster than typing
+- Accessibility for users with disabilities
+
+**Why it matters:** In disaster scenarios, physical and cognitive stress significantly impairs fine motor skills. Voice input removes a critical barrier to communication when it matters most.
+
+---
+
+### BLE Priority Queue — Radio-Level Emergency Preemption
+
+Ensures that life-critical messages are transmitted before routine traffic even at the radio layer, eliminating head-of-line blocking caused by large queues of low-priority packets.
+
+**Implementation:**
+- `BluetoothPacketBroadcaster` replaced with a `java.util.PriorityQueue` + `Mutex` + `CONFLATED` signal actor
+- Every outgoing packet carries a `priority: Int` field on `RoutedPacket` (default 2 = NORMAL); set synchronously by `KeywordMessageClassifier` inside `sendMessage()` before the packet is enqueued
+- CRITICAL packets are dequeued ahead of all NORMAL and NONE packets, regardless of arrival order
+
+**Benchmark results (queue-level simulation, not over-the-air BLE):**
+
+| Device | PQ latency | FIFO latency | Improvement |
+|---|---|---|---|
+| Pixel 9 Pro | 104 µs | 101 ms | **975×** |
+| Galaxy S10+ | 102 µs | 101 ms | **983×** |
+| Pixel 3a | 102 µs | 100 ms | **981×** |
+
+*N=1,000 packets, 100 µs/packet inter-arrival, 10 runs median. Measurement characterizes the queue scheduling layer in isolation; over-the-air BLE latency includes additional PHY-layer delays not modeled here. Analytical bound: 1,000×.*
+
+**Why it matters:** A CRITICAL SOS message queued behind a routine status update could arrive minutes later in a high-traffic mesh. Radio-level preemption closes that gap to near-zero.
+
+---
+
+### Emergency Location Attachment
+
+Allows users to voluntarily attach their GPS location or a typed address to CRITICAL and HIGH priority messages, enabling coordinators to pinpoint distress signals on a map.
+
+**Implementation:**
+- `LocationAttachSheet` — bottom sheet triggered automatically when the classifier detects a CRITICAL or HIGH message
+- Offers GPS coordinates (via Android `FusedLocationProviderClient`) or free-text address entry
+- Location appended to the message body as `📍 lat,lon`; never pre-filled to preserve user privacy
+- ICS-213 report extracts and preserves location data per incident row
+
+---
+
+### M3 — FEMA ICS-213 Situation Report Generator
+
+Automatically aggregates prioritized messages from across the mesh network and generates structured situation reports compatible with the **FEMA Incident Command System (ICS-213)** General Message standard.
+
+**Implementation:**
+- `ICS213ReportData` — structured data classes capturing incident metadata (sender, timestamp, category, priority, location, message body)
+- `ICS213ReportGenerator` — pure Kotlin HTML renderer; no Android dependencies; unit-testable in `:resqmesh-ai`
+- `ICS213ReportScreen` — full-screen Compose preview rendering the form as a `LazyColumn`
+- `ICS213PrintHelper` — loads the generated HTML into a headless `WebView` and triggers the Android `PrintManager`
+
+**Output includes:**
+- Incident log grouped by emergency category and priority
+- Per-incident: sender, timestamp, full message body, and GPS coordinates (when attached)
+- Shareable HTML document compatible with any browser for printing
+
+**Why it matters:** Emergency coordinators need structured, actionable information — not raw message feeds. ICS-213 compatibility ensures reports integrate directly into existing federal and state emergency management workflows.
+
+---
+
+### M4 — AI Energy Optimizer
+
+Intelligently manages radio relay decisions based on battery state to maximize mesh network lifetime under power constraints.
+
+**Implementation:**
+- `EnergyMode` enum: PERFORMANCE / BALANCED / POWER_SAVER / ULTRA_LOW_POWER
+- `EnergyRelayPolicy` — relay probability = `networkFactor(N)` × `energyMultiplier(EnergyMode)`
+- CRITICAL floor: **≥0.20 relay probability at ULTRA_LOW_POWER** — ensures last-resort forwarding even on nearly-dead devices
+
+**Analytical model:**
+Battery depletion modeled as exponential decay with λ=0.1 h⁻¹ (derived from BLE 4.0 power characterization, treated as conservative worst-case; modern BLE 5.x devices expected to show lower drain rates).
+
+**Projected node survival improvement at t=6 h (Monte Carlo validated, 5,000 runs, <0.3 pp error):**
+
+| Mode | Improvement vs blind relay |
+|---|---|
+| BALANCED (p=0.75) | +16% |
+| POWER_SAVER (p=0.50) | +35% |
+| ULTRA_LOW_POWER (p=0.25) | **+57%** |
+
+**λ sensitivity:** at λ=0.05 (20 h battery) BALANCED reaches +33%; at λ=0.20 (5 h battery), +7% — positive across the full realistic range.
+
+**Phase 2 planned:**
+- Adaptive BLE/Wi-Fi Direct switching: Wi-Fi Direct activates in PERFORMANCE/BALANCED mode for large payloads (~20% higher power cost), BLE as default
+- Protocol-level battery metadata broadcasting across mesh nodes
+
+**Why it matters:** In prolonged disaster scenarios (multi-day events), extending network lifetime by 16–57% can be the difference between maintaining communication during critical rescue windows.
+
+---
+
+### M5 — Photo Scene Analysis (Image-to-Text for BLE Efficiency)
+
+Converts a photo taken at an incident scene into a compact text emergency report using on-device image classification, eliminating the need to transmit raw image data over the BLE mesh.
+
+**The bandwidth problem:** BLE mesh throughput peaks at ~20–50 KB/s per hop. A single smartphone photo (300–900 KB) occupies the shared radio channel for 6–45 seconds per hop, blocking all concurrent delivery.
+
+**The solution:** Classify the image locally, discard it, send only the resulting text description — typically 47–70 bytes. This achieves a mean **7,869× bandwidth reduction** relative to raw JPEG.
+
+**Implementation:**
+- `VisionTFLiteClassifier` — custom **MobileNetV2** model trained via transfer learning from ImageNet weights on a curated emergency scene dataset; 5 output categories: **FIRE, FLOOD, WEATHER, SECURITY, NORMAL**; input: 224×224 px normalized to [−1, 1]; confidence threshold: **0.65**
+- `ImageSceneAnalyzer` — suspending wrapper; uses `VisionTFLiteClassifier` as primary; falls back to **ML Kit Image Labeling** when TFLite confidence is below threshold
+- `SceneToEmergencyMapper` — pure-Kotlin mapper: translates ML Kit label strings into one of the 9 app emergency categories; no Android or ML Kit dependencies
+
+**Evaluation results (disjoint 50-photo test set, preventing data leakage):**
+
+| Category | F1 |
+|---|---|
+| FIRE | 1.00 |
+| FLOOD | 0.95 |
+| WEATHER | 0.95 |
+| SECURITY | 1.00 |
+| NORMAL | 1.00 |
+| **Macro-F1** | **0.98** |
+
+Bootstrap 95% CI (1,000 resamples, n=50): **[0.93, 1.00]**
+
+**Full-pipeline latency (physical devices):**
+- Pixel 9 Pro: 24.5 ms
+- Galaxy S10+: 50.1 ms
+- Pixel 3a: 87.9 ms
+
+**Three outcome paths:**
+
+| TFLite / ML Kit result | Sent to mesh |
+|---|---|
+| TFLite detects emergency category ≥ 65% confidence (FIRE, FLOOD, WEATHER, SECURITY) | Text only: `[📷] 🔥 FIRE: Burning building, smoke. Requires immediate response.` |
+| Labels returned, no matching category | Text only: `[📷] Scene: Building, outdoor, road.` — user can edit before sending |
+| No labels / ML Kit failure | Image sent as attachment (original behavior, graceful fallback) |
+
+**Why it matters:** BLE mesh bandwidth is a shared, scarce resource. A mean 7,869× reduction enables practical photo-based reporting in multi-hop mesh scenarios where raw image transfer would be infeasible.
+
+---
+
+## Roadmap
+
+**Phase 1 — Core AI Platform (current, 0–3 months):**
+- ✅ Project forked from BitChat Android (GPL-3.0)
+- ✅ `:resqmesh-ai` Gradle module — dedicated AI library module, independent of `:app`
+- ✅ M1: Keyword classifier — ~90 FEMA/ICS keyword rules across 9 emergency categories + NONE
+- ✅ M1: TFLite dual-Conv1D classifier — 1,137 KB INT8, macro-F1=0.92, trained on 2,700 messages
+- ✅ M1: `CompositeMessageClassifier` — keyword-first, TFLite fallback two-stage pipeline
+- ✅ M1: Real-time visual indicators — category-coloured left stripes and emoji badges on every classified message
+- ✅ M1: Emergency Feed — always-visible feed button opens a priority-sorted category sheet
+- ✅ M2: Offline Speech Recognition — Vosk Android, 10–15% WER, <300ms latency, 20+ languages
+- ✅ BLE Priority Queue — CRITICAL packets preempt NORMAL/NONE at the radio layer; 975–983× faster delivery (queue-level simulation on 3 devices)
+- ✅ Emergency Location Attachment — optional GPS / manual address appended to CRITICAL and HIGH messages
+- ✅ M3: FEMA ICS-213 Report Generator — Compose-rendered report with share/print support
+- ✅ M4: AI Energy Optimizer — `EnergyRelayPolicy` projects +16–57% node survival (Monte Carlo, 5,000 runs); CRITICAL floor ≥0.20 at ULTRA_LOW_POWER
+- ✅ M5: Photo Scene Analysis — MobileNetV2, macro-F1=0.98, 7,869× bandwidth reduction, 24.5–87.9ms latency
+
+**Phase 2 (6–12 months):**
+- Adaptive BLE/Wi-Fi Direct transport switching based on battery state and payload size
+- Spatial pattern detection — geographic clustering of incident reports with visual heatmap
+- Real-time situational awareness map for coordinator dashboard
+- Protocol-level battery metadata broadcasting across mesh nodes
+
+**Phase 3 (12–24 months):**
+- Federated learning — distributed AI model improvement across mesh nodes without sharing raw data
+- LLM-based natural language situation report generation (on-device, quantized models)
+- Multi-language support for diverse disaster-affected populations
+- Integration with FEMA IPAWS (Integrated Public Alert and Warning System)
+
+---
+
+## National Importance & Research Context
+
+This platform addresses priorities identified by multiple U.S. federal initiatives:
+
+- **White House 2024 Critical and Emerging Technologies List** — *Integrated Communication and Networking Technologies* explicitly includes mesh networks and infrastructure-independent communication technologies
+- **NSF RINGS Program** — $37M investment in resilient next-generation networking systems
+- **FEMA Strategic Plan 2022–2026** — priority on technology-driven disaster resilience
+- **FCC Disaster Information Reporting System** — need for resilient communication during infrastructure failures
+
+---
+
+## Technical Stack
+
+| Component | Technology | Module |
+|---|---|---|
+| Language | Kotlin | — |
+| UI Framework | Jetpack Compose + Material Design 3 | `:app` |
+| AI/ML Runtime | TensorFlow Lite 2.14 | `:resqmesh-ai` |
+| M1 Classifier | dual-Conv1D INT8 (1,137 KB, macro-F1=0.92) + keyword rules | `:resqmesh-ai` |
+| Speech Recognition | Vosk Android 0.3.47 (offline, 20+ languages) | `:resqmesh-ai` |
+| Image Scene Analysis | MobileNetV2 TFLite (macro-F1=0.98, 7,869× BW reduction) + ML Kit fallback | `:app` + `:resqmesh-ai` |
+| Mesh Transport | Bluetooth Low Energy (BLE), selected over LoRa (no extra hardware) and Wi-Fi Direct (~20% lower power) | `:app` |
+| Encryption | Noise Protocol Framework (mutual auth, forward secrecy, replay protection) | `:app` |
+| Mesh Routing | Multi-hop flood routing with Bloom Filter deduplication | `:app` |
+| Minimum Android | 8.0 (API 26) | — |
+
+---
+
+## Getting Started
 
 ```bash
-npm install
-npm run dev                 # browser build with the simulated mesh, http://localhost:3000
-npm run typecheck && npm test && npm run build
-npm run contrast            # WCAG AA check of every colour pair, both themes
+# Clone the repository
+git clone https://github.com/AleksPlekhov/ai-mesh-emergency-communication-platform.git
+
+# Open in Android Studio
+# File → Open → select project directory
+
+# Build
+./gradlew build
+
+# Install on device
+./gradlew installDebug
 ```
 
-### Android
+**Requirements:**
+- Android Studio Hedgehog or later
+- Android device or emulator running API 26+
+- Bluetooth LE capable hardware (for mesh testing)
+- Minimum 2 devices recommended for mesh testing
 
-Needs JDK 21 (Capacitor Android 8 compiles Java 21; JDK 17 and JDK 25+ both fail), the Android SDK,
-and Google Play Services on the phone (Android 8.0+, API 26).
+---
 
-```bash
-npm run build && npx cap sync android
-cd android
-export JAVA_HOME="$(brew --prefix openjdk@21)" ANDROID_HOME="$HOME/Library/Android/sdk"
-./gradlew assembleDebug     # android/app/build/outputs/apk/debug/app-debug.apk
-```
+## Based On
 
-Install on two phones and capture logs (replace the serials from `adb devices`):
+This platform extends **BitChat Android** ([permissionlesstech/bitchat-android](https://github.com/permissionlesstech/bitchat-android), commit `main` branch, accessed Jan. 2025), an open-source BLE mesh messaging application released under GPL-3.0. The core BLE mesh transport, Noise Protocol encryption, and multi-hop routing are derived from BitChat. The AI inference layer, speech recognition module, FEMA reporting system, and energy optimization components are original contributions of this project.
 
-```bash
-adb devices
-adb -s <serialA> install -r app/build/outputs/apk/debug/app-debug.apk
-adb -s <serialB> install -r app/build/outputs/apk/debug/app-debug.apk
-adb -s <serialA> logcat -c && adb -s <serialA> logcat | grep -i SanketMesh   # one terminal per phone
-```
+In accordance with GPL-3.0, this project is released under the same license and all source code is publicly available.
 
-Open `SanketSetu/android` (not the repo root) in Android Studio and decline any Gradle upgrade prompt:
-the project is pinned to Gradle 8.14.3 and AGP 8.13. Real mesh behaviour needs two or more physical
-phones; follow [docs/HARDWARE_TEST_CHECKLIST.md](docs/HARDWARE_TEST_CHECKLIST.md) (start with the
-10-minute two-phone test).
+---
 
-### Static demo site
+## Research & Publications
 
-`vercel.json` and `netlify.toml` publish `dist/` (the simulated mesh) as a static site.
+- **[Published — December 18, 2024]**
+  "Strategies for Minimizing Power Consumption and Optimizing Resources for Android-Based Mesh Networks" — *In Plain English*.
+  URL: https://plainenglish.io/technology/strategies-for-minimizing-power-consumption-and-optimizing-resources-for-android-based-mesh-networks
 
-## 9. Tests
+- **[Published — January 8, 2025]**
+  "Optimizing Android Mesh Networks for Mobility: Enhancing Connectivity in Moving Peer-to-Peer Systems" — *Medium / Android Development*.
+  URL: https://medium.com/android-networking/optimizing-android-mesh-networks-for-mobility-enhancing-connectivity-in-moving-peer-to-peer-14ec750ae33a
 
-`npm test` runs 38 deterministic tests with `node:test` (no network, no real clock dependence beyond
-short waits): signatures, tamper and replay rejection, forged ACKs, TTL, dedup, jitter and
-suppression, priority under flood, rate limiting, 4-node multi-hop, link break and sync, outbox retry
-and restore, sealed GPS, responder certificates, identity vault, geo clustering, benchmark statistics,
-offline AI behaviour, and the core-never-imports-UI architecture rule.
+- **[Published — March 30, 2025]**
+  "Disaster-Proof Mobile Networks: How Android-Powered Mesh Tech Can Save Lives" — *Medium*.
+  URL: https://medium.com/@aleks.plekhov/disaster-proof-mobile-networks-how-android-powered-mesh-tech-can-save-lives-75fac09224ba
 
-## 10. Performance
+- **[Published — October 2025]**
+  "Wi-Fi Direct in Android: Creating Seamless Device-to-Device Communication" — *Sustainable Engineering and Innovation*, Vol. 7, No. 2, pp. 477–492. Co-authored with Kateryna Babii. DOI: 10.37868/sei.v7i2.id539.
 
-Initial load (production build): main chunk 468 kB (149 kB gzip) plus a 40 kB stylesheet; screens
-load on demand (3 to 23 kB each, AI assistant 97 kB). The optional 3D visual (917 kB) loads only
-when switched on in Settings. Before the redesign the Home route alone shipped about 1.7 MB.
-Details in [docs/UI_PERFORMANCE.md](docs/UI_PERFORMANCE.md). Frame rate and battery were **not**
-measured on a phone; judge them on a release build, not an emulator.
+- **[Preprint — March 31, 2026]**
+  "AI-Driven Message Prioritization for Offline BLE Mesh Networks in Disaster Response Scenarios" — SSRN, DOI: 10.2139/ssrn.6428398. *(Covers M1 classifier only; substantially extended in the FMEC 2026 submission below.)*
 
-## 11. Known limitations
+- **[Published — March 25, 2026]**
+  "[When the Internet Dies, Your Phone Can Still Be Smart: Building AI-Powered Disaster Communication](https://hackernoon.com/when-the-internet-dies-your-phone-can-still-be-smart-building-ai-powered-disaster-communication)" — HackerNoon.
 
-- **Soft real-time, best effort.** No latency guarantee. Benchmark numbers come from the simulated mesh.
-- Google Nearby Connections sustains roughly 3 to 5 simultaneous links per phone (device dependent); we cap at 4.
-- Battery versus connectivity is a trade-off: Balanced and Saver find peers more slowly.
-- Android with Google Play Services only. No iOS.
-- **The native relay forwards unverified packets.** `RelayCore.kt` only reads `id/ttl/hops` to keep relaying while the WebView is throttled; the TypeScript engine does all signature checks and decryption. A malicious nearby device can make phones spend radio and battery on junk, bounded by TTL and the dedup cache.
-- **Signature verification runs on the main thread**, not a Web Worker. Under a packet flood this can cause UI jank.
-- The PIN KDF is an iterated SHA-512 stretch, not a vetted KDF; Android Keystore wrapping is not wired in. Without a PIN, the key sits beside its ciphertext.
-- Only this phone's own messages, SOS alerts and outbox are restored after a restart; received message history is not.
-- RSSI and link quality for real peers are constant placeholders (Nearby Connections does not expose them), so Rescuer Locate exists only in Demo mode, as a simulated prototype.
-- The Responder Authority and its group key are a built-in **DEMO** authority; there is no revocation or key rotation.
-- Everything about the real radio path (permissions, advertising, discovery, connection, notifications, vibration) is **UNVERIFIED on hardware**: it is covered by integration tests against a fake native bridge and by a successful `assembleDebug`, not by a two-phone run. See the checklist.
+- **[Submitted — April 2026]**
+  "ResQMesh AI: On-Device Machine Learning for Bandwidth-Efficient and Energy-Aware Emergency Communication over Offline BLE Mesh Networks" — *11th International Conference on Fog and Mobile Edge Computing (FMEC 2026)*, Abu Dhabi, UAE. IEEE. Paper ID: 2661312400.
 
-## 12. Screenshots
+---
 
-Light theme, 360x800, from `node scripts/capture-screenshots.mjs` (needs the preview server and Chrome):
-[home](docs/screenshots/home.png), [SOS](docs/screenshots/sos.png), [chat](docs/screenshots/chat.png),
-[alerts](docs/screenshots/alerts.png), [circles](docs/screenshots/circles.png), [map](docs/screenshots/map.png),
-[mesh quality](docs/screenshots/mesh-quality.png), [benchmark](docs/screenshots/simulator-benchmark.png),
-[settings](docs/screenshots/settings.png), [splash](docs/screenshots/splash.png), [onboarding](docs/screenshots/onboarding-1.png).
-Screenshots are browser captures of the simulated mesh, not real-radio sessions.
+## Contributing
 
-## 13. Team and license
+Contributions are welcome. This is an active research project and we particularly value:
 
-Team Astra: Golconda Dhanush Kumar (lead), Deepak Prajapati, GS Nishanth, Satyavarapu Subhash Raj,
-V. Ruthvik Bhaskar. MIT, see [LICENSE](LICENSE). Mesh engine, crypto, plugin and UI were written for
-this hackathon; fonts are Noto Sans (SIL OFL) via `@fontsource`. The AI assistant is optional and uses
-Featherless.ai when you provide a key (`VITE_FEATHERLESS_API_KEY`; a key in a client bundle can be
-extracted, so use a throwaway key).
+- Testing on diverse Android hardware
+- Disaster scenario simulation datasets
+- ML model improvements for message classification
+- Multilingual speech recognition integration
+
+Please open an issue before submitting a pull request for significant changes.
+
+---
+
+## Author
+
+**Oleksandr Pliekhov**
+Android & Mesh Systems Researcher | Lead Developer
+Charlotte, North Carolina, USA
+
+*Research focus: AI-enhanced offline communication systems for emergency response*
+
+---
+
+## License
+
+This project is licensed under the **GNU General Public License v3.0** — see [LICENSE](LICENSE) for details.
+
+In accordance with GPL-3.0 requirements, this project is derived from [BitChat Android](https://github.com/permissionlesstech/bitchat-android) and maintains the same open-source license. All modifications and additions are documented in the commit history.
+
+---
+
+## Acknowledgments
+
+- [permissionlesstech/bitchat-android](https://github.com/permissionlesstech/bitchat-android) — foundational BLE mesh protocol implementation
+- [Vosk Speech Recognition](https://alphacephei.com/vosk/) — offline STT engine
+- [TensorFlow Lite](https://www.tensorflow.org/lite) — on-device ML inference
+- [Google ML Kit Image Labeling](https://developers.google.com/ml-kit/vision/image-labeling) — fallback classifier for M5
+
+---
+
+*SanketSetu (formerly ResQMesh AI Platform) is an independent research project. It is not affiliated with FEMA, NSF, or any U.S. government agency.*

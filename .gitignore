@@ -28,3 +28,13 @@ coverage/
 .env.production
 .env.development
 !.env.example
+
+
+# Artifacts & Large APK binaries
+artifacts/
+*.apk
+git clones/
+.gradle/
+build/
+app/build/
+resqmesh-ai/build/

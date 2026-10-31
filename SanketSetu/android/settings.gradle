@@ -1,8 +1,0 @@
-include ':app'
-include ':capacitor-cordova-android-plugins'
-project(':capacitor-cordova-android-plugins').projectDir = new File('./capacitor-cordova-android-plugins/')
-
-include ':nearby-mesh'
-project(':nearby-mesh').projectDir = new File('../plugins/nearby-mesh/android')
-
-apply from: 'capacitor.settings.gradle'

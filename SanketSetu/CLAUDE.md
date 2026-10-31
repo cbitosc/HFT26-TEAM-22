@@ -1,55 +1,400 @@
-# Sanket Setu — Operating Rules
+# Claude Code Instructions — SanketSetu (formerly ResQMesh AI) / BitChat Android
 
-Android-first, 100% offline, multi-hop emergency mesh messaging app with closed-loop SOS.
-This file persists the rules the project is built under. Follow them on every change.
+> **Effective: April 2026**  
+> **Project:** Decentralized BLE mesh messenger with on-device AI for disaster response.  
+> **Repository:** `/Users/oleksandr/Documents/_Projects/_ReqQMesh`
 
-## Non-negotiables
+---
 
-1. **No server backend, ever.** "Backend" = the on-device mesh engine (`src/mesh/`,
-   `src/crypto/`, `src/transport/`) + the Kotlin foreground service in
-   `plugins/nearby-mesh/android/`. Core messaging, SOS, relay, ACK, sync, and crypto must
-   NEVER touch the network. AI (Featherless.ai) is optional, disabled offline, advisory-only,
-   and is the only code path allowed to make network calls.
-2. **Verify after every task.** Run `npm run typecheck && npm test && npm run build` after
-   every change. Do not move on to the next task while any of them are red.
-3. **One logical change per commit**, conventional messages (`feat:`, `fix:`, `refactor:`,
-   `test:`, `docs:`, `chore:`). Never rewrite or squash history. Never commit secrets,
-   `node_modules`, `dist`, or keystores.
-4. **No invented metrics, features, or hardware results.** Anything that only runs against
-   `SimTransport` (the in-memory virtual mesh) must be visibly labeled SIMULATED in the UI.
-   Anything that requires real phones to verify goes in `docs/HARDWARE_TEST_CHECKLIST.md`
-   as UNVERIFIED until a human ticks it.
-5. **No scope creep.** Don't add features outside an explicit task. Don't rewrite working
-   code without a stated reason.
-6. **Crypto is TweetNaCl only.** Ed25519 (`nacl.sign`) for signatures, X25519 + XSalsa20-Poly1305
-   (`nacl.box` / `nacl.secretbox`) for encryption. Never claim XChaCha20 anywhere — fix any
-   doc/UI/comment that says so.
-7. **Signature scope is fixed and must not regress.** The Ed25519 signature
-   (`src/crypto/sign.ts`) covers only immutable origin fields
-   (`v, id, type, prio, src, srcSignPub, srcBoxPub, dst, ts, nonce, payload`). `ttl`, `hops`,
-   and `route` mutate per hop and are intentionally excluded. Relays never re-sign another
-   node's packet; `route` is an unauthenticated diagnostic hint only.
-8. **`core/` layering**: `src/mesh/`, `src/crypto/`, `src/transport/`, and `src/db/` must
-   never import from `src/screens/`, `src/components/`, `src/app/`, or `src/store/`.
+## 1. Project Overview
 
-## Repo layout note
+### What This Is
+A privacy-focused, off-grid communication Android app combining:
+- **BLE mesh networking** — peer-to-peer without internet or servers
+- **Noise Protocol encryption** — secure channels without PKI
+- **Nostr relay integration** — bridge to wider internet when available
+- **On-device AI** — message prioritization, offline speech recognition, FEMA-style reporting
 
-The judged project root is `SanketSetu/` (this directory), inside the
-`HFT26-TEAM-22` Hacktoberfest starter repo. `HFT26-TEAM-22/README.md` is the official
-team-registration document for organizers and is intentionally left separate from this
-project's own README/docs.
+### Multi-Module Structure
+```
+:app                    — Main Android app (UI, mesh, crypto, Nostr)
+:resqmesh-ai        — AI library module (TFLite, Vosk STT)
+docs/                   — Architecture specs (file_transfer.md, SOURCE_ROUTING.md, etc.)
+```
 
-## Known architectural facts (keep docs honest about these)
+---
 
-- `MeshEngine` (`src/mesh/engine.ts`) is transport-agnostic and already implements
-  Ed25519 auth, X25519 E2E, channel-encrypted SOS, sealed precise location, controlled
-  flooding, 4-queue priority scheduling, jitter + overhear suppression, replay window,
-  per-peer rate limiting, store-and-forward outbox with exponential backoff, and
-  SYNC_INV/SYNC_REQ anti-entropy. This logic is real and unit-tested (`tests/mesh.test.ts`).
-- There is no `android/` Capacitor platform directory yet — `npx cap add android` has not
-  been run, so the Kotlin plugin in `plugins/nearby-mesh/` cannot currently be compiled into
-  an APK.
-- `NearbyTransport` (real Google Nearby Connections) is not wired into the live
-  `MeshEngine` — the app's single engine instance always runs on `SimTransport`.
-  Fixing this wiring (and making the native plugin buildable) is the highest-priority
-  remaining gap for the judged "offline P2P messaging" requirement.
+## 2. Tech Stack
+
+| Layer | Technology |
+|-------|------------|
+| Language | Kotlin (JVM 1.8) |
+| UI | Jetpack Compose (Material 3) |
+| Build | Gradle (Kotlin DSL), `libs.versions.toml` |
+| Async | Coroutines + Flow |
+| BLE | Nordic Semiconductor BLE library (2.6.1) |
+| Crypto | BouncyCastle, Tink, Noise Protocol Framework |
+| AI/ML | TensorFlow Lite (2.14.0), Vosk (0.3.47), Google ML Kit Image Labeling |
+| Vision | MobileNetV2 (custom TFLite, 224x224 input, 5-class emergency scene detection) |
+| Networking | OkHttp (WebSocket for Nostr), Tor/Arti (planned) |
+| Location | Google Play Services Location |
+
+---
+
+## 3. Directory Map
+
+### App Module (`app/src/main/java/com/bitchat/android/`)
+
+| Package | Responsibility |
+|---------|----------------|
+| `ui/` | Compose screens, ViewModels, theme |
+| `ui/media/` | Image viewer, audio player, file picker, photo report button |
+| `ui/debug/` | Mesh graph visualization, debug settings |
+| `mesh/` | **BLE core**: scanning, advertising, GATT, packet relay, security |
+| `protocol/` | Binary wire protocol, compression, padding |
+| `crypto/` | Encryption primitives |
+| `noise/` | Noise Protocol implementation (handshake + transport) |
+| `nostr/` | Nostr protocol: events, relays, Bech32, PoW, DMs |
+| `service/` | `MeshForegroundService` — keeps mesh alive in background |
+| `services/` | `MessageRouter`, `VerificationService`, `MeshGraphService` |
+| `geohash/` | Location channels, geocoding (OSM + Android fallback) |
+| `identity/` | Key management, identity announcements |
+| `model/` | Data classes: `BitchatMessage`, `FragmentPayload`, etc. |
+| `sync/` | Gossip sync, bloom filters, packet deduplication |
+| `onboarding/` | Permission flows, battery optimization, BT setup |
+| `features/file/` | File transfer logic |
+| `features/media/` | Media handling, `ImageSceneAnalyzer`, `ImageUtils` (vision pipeline orchestration) |
+| `sos/` | SOS coordinator: hold-to-send state, receipts/replies, responder certificate trust (`TrustAnchors`) — see `docs/SOS_RESCUE_FEATURES.md` |
+| `ui/sos/` | SOS Compose UI: hold button, situation picker, tracker, SOS chat card |
+| `util/` | Extensions, constants, binary encoding |
+
+### AI Module (`resqmesh-ai/src/main/java/com/bitchat/android/ai/`)
+
+| Package | Responsibility |
+|---------|----------------|
+| `classifier/` | Message priority classification (CompositeMessageClassifier: keyword + TFLite pipeline) |
+| `vision/` | `VisionTFLiteClassifier` (MobileNetV2), `SceneToEmergencyMapper` (ML Kit label mapping) |
+| `voice/` | Vosk STT, voice recording, waveform visualization |
+| `energy/` | `EnergyRelayPolicy` — relay energy management |
+| `emergency/` | `EmergencyClassification` — badge logic, category emoji/label helpers |
+| `report/` | ICS-213 FEMA report data classes and HTML generator |
+| `sos/` | SOS wire codec, tracker state machine, responder certificate verify, localized (EN/HI/TE/TA) content — pure Kotlin |
+
+---
+
+## 4. Critical Patterns & Conventions
+
+### State Management
+- **ViewModels** expose `StateFlow` to Composables
+- **Business logic** lives in services (not ViewModels)
+- **Service-to-UI communication** via `BroadcastReceiver` or Flow from `MeshForegroundService`
+
+### Permissions (CRITICAL)
+The app requires dangerous runtime permissions:
+- `BLUETOOTH_SCAN`, `BLUETOOTH_CONNECT`, `BLUETOOTH_ADVERTISE`
+- `ACCESS_FINE_LOCATION`, `ACCESS_BACKGROUND_LOCATION`
+- `RECORD_AUDIO` (voice input)
+- `POST_NOTIFICATIONS` (Android 13+)
+- `CAMERA` (photo report capture)
+- `READ_MEDIA_*` / `READ_EXTERNAL_STORAGE` (file sharing)
+
+**Always** verify permission patterns in `MainActivity.kt` or `onboarding/` before adding new hardware features.
+
+### Background Execution
+- **Never** start BLE operations without binding to `MeshForegroundService`
+- Background limits are strict; the service must display a notification to stay alive
+- Use `MeshServicePreferences` to check if background mode is enabled
+
+### Threading
+- **I/O operations** → `Dispatchers.IO`
+- **BLE callbacks** → handled on dedicated threads, marshal to coroutines via `CoroutineScope`
+- **UI updates** → use `collectAsStateWithLifecycle()`
+
+### Naming
+- ViewModels: `*ViewModel`
+- Services: `*Service` (or `*Manager` for utility services)
+- Screens: `*Screen`
+- Composables: `PascalCase`, descriptive (e.g., `MessageBubble`, not `MsgBbl`)
+
+---
+
+## 5. Key Files You Must Know
+
+### Entry Points
+```
+MainActivity.kt           — Single Activity, onboarding orchestration
+MeshForegroundService.kt  — Persistent background service
+BitchatApplication.kt     — App initialization
+```
+
+### Core Protocol
+```
+mesh/BluetoothMeshService.kt      — Main BLE coordinator
+mesh/BluetoothGattServerManager.kt — GATT server for mesh
+mesh/BluetoothGattClientManager.kt — GATT client connections
+mesh/PacketRelayManager.kt        — Multi-hop routing
+protocol/BinaryProtocol.kt         — Wire format
+```
+
+### Security
+```
+crypto/EncryptionService.kt   — High-level encryption API
+noise/NoiseEncryptionService.kt — Noise Protocol handshake
+noise/NoiseSession.kt          — Session state machine
+identity/SecureIdentityStateManager.kt — Key storage (encrypted prefs)
+```
+
+### Nostr Integration
+```
+nostr/NostrRelayManager.kt  — WebSocket relay connections
+nostr/NostrTransport.kt     — Bridge between mesh and Nostr
+nostr/NostrCrypto.kt        — Event signing/verification
+```
+
+### Image-to-Category Pipeline
+```
+features/media/ImageSceneAnalyzer.kt       — Orchestrator: TFLite vision → ML Kit fallback
+features/media/ImageUtils.kt               — Downscale (512px), EXIF rotation, JPEG save
+ui/media/PhotoReportButton.kt              — Orange button: tap=gallery, long-press=camera
+ai/vision/VisionTFLiteClassifier.kt        — MobileNetV2 scene classifier (5 classes)
+ai/vision/SceneToEmergencyMapper.kt        — Maps ML Kit labels → 9 emergency categories
+```
+
+### Text Classification Pipeline
+```
+ai/classifier/CompositeMessageClassifier.kt — Two-stage: keyword → TFLite neural
+ai/classifier/KeywordMessageClassifier.kt   — 200+ emergency phrases, rule-based
+ai/classifier/TFLiteMessageClassifier.kt    — Keras text model (10-class)
+ai/classifier/MessageClassifierFactory.kt   — Runtime factory, selects best backend
+ai/classifier/ClassifierUtils.kt            — Priority mapping helpers
+```
+
+### Model Assets (resqmesh-ai/src/main/assets/)
+```
+emergency_vision_model.tflite  — MobileNetV2 vision (2.68 MB, 224x224 → 5 classes)
+vision_label_map.json          — Vision labels: fire, flood, normal, security, weather
+emergency_model.tflite         — Keras text classifier (tokenized text → 10 classes)
+label_map.json                 — Text labels: FIRE, FLOOD, MEDICAL, COLLAPSE, etc.
+tokenizer.json                 — Keras word-level tokenizer (word_index mapping)
+```
+
+### UI
+```
+ui/ChatScreen.kt        — Main chat UI (refactored, component-based)
+ui/ChatViewModel.kt     — Primary ViewModel for chat state
+ui/LocationAttachSheet.kt — Emergency location dialog (onSend/onSkip/onDismiss)
+ui/CategoryMessagesScreen.kt — Category-filtered message view
+ui/theme/Theme.kt       — Material 3 color scheme
+```
+
+---
+
+## 6. Build & Development
+
+### Common Commands
+```bash
+./gradlew :app:assembleDebug              # Build debug APK
+./gradlew :resqmesh-ai:test           # Run AI module unit tests
+./gradlew :app:test                       # Run app unit tests
+./gradlew :app:connectedAndroidTest       # Instrumented tests (device required)
+./gradlew lint                            # Lint check
+./gradlew clean                           # Clean build
+```
+
+### Version Catalog
+All dependencies are in `gradle/libs.versions.toml`.  
+Add new dependencies there, reference in build scripts as `implementation(libs.xxx)`.
+
+### Testing Strategy
+- **Unit tests**: `app/src/test/kotlin/` — business logic, crypto, protocols
+- **AI tests**: `resqmesh-ai/src/test/` — classifier tests with Robolectric
+- **Integration tests**: `app/src/androidTest/` — minimal, requires BLE hardware
+
+**Note**: BLE is difficult to mock. Focus tests on protocol parsing, crypto, and state machines. Use `Robolectric` for tests needing Android resources.
+
+---
+
+## 7. Architecture Decisions
+
+### Why Noise Protocol?
+Zero-RTT encryption with mutual authentication, no certificate infrastructure required. Perfect for ephemeral disaster scenarios.
+
+### Why Nostr?
+Decentralized relay network provides internet fallback without central servers. Messages are signed and verifiable.
+
+### Why On-Device AI?
+Cloud dependency is fatal in disasters. TFLite + Vosk run entirely offline.
+
+---
+
+## 8. Debugging & Development Tips
+
+### Logs
+All mesh components use `android.util.Log` with consistent tags:
+- `BluetoothMeshService`
+- `MeshForegroundService`
+- `NostrRelayManager`
+
+### Debug Features
+- `DebugSettingsSheet` — enable mesh graph visualization, verbose logging
+- `MeshGraphService` — generates graph data for network topology debugging
+- Shake device to open debug panel (if enabled)
+
+### Common Pitfalls
+1. **Android 12+ (API 31+)**: BLUETOOTH_SCAN/CONNECT/ADVERTISE are runtime permissions
+2. **Location**: BLE scanning requires location permission on all Android versions
+3. **Background**: `startForegroundService()` requires notification permission on Android 13+
+4. **Memory**: Large file transfers use chunking; check `FragmentManager.kt` for limits
+
+---
+
+## 9. AI Module Specifics
+
+### Module Placement Rule (MANDATORY)
+
+> **New code with no Android framework or Jetpack Compose dependencies MUST go in `:resqmesh-ai`.**
+
+| Code type | Module |
+|-----------|--------|
+| Pure Kotlin logic, data classes, algorithms | `:resqmesh-ai` |
+| Functions that use `ClassificationResult`, `MessagePriority` | `:resqmesh-ai` |
+| HTML/report generators with no Android deps | `:resqmesh-ai` |
+| Compose UI, `Context`, `View`, Android SDK types | `:app` |
+| BLE, crypto, Nostr, mesh networking | `:app` |
+
+Examples already in `:resqmesh-ai`: `ICS213ReportData`, `ICS213ReportGenerator`, `shouldShowEmergencyBadge`, `categoryEmojiAndLabel`.
+
+### Image-to-Category Pipeline (IMPORTANT)
+
+The app converts photos into emergency categories entirely on-device:
+
+```
+Photo → Downscale (512px) → MobileNetV2 Vision (224x224) → Text Description → Text Classifier → Category + Priority
+```
+
+**Stage 1 — Vision (image → text):**
+- `VisionTFLiteClassifier`: custom MobileNetV2 (5 classes: fire, flood, normal, security, weather)
+  - Input: 224x224 bitmap, pixels normalized to [-1, 1]
+  - Confidence threshold: 0.55 — below this falls back to ML Kit
+- `SceneToEmergencyMapper`: maps Google ML Kit Image Labeling output (117 keyword rules) → 9 categories
+- `ImageSceneAnalyzer`: orchestrator in `:app` — tries TFLite first, ML Kit fallback
+
+**Stage 2 — Text classification (text → category + priority):**
+- `CompositeMessageClassifier`: two-stage pipeline
+  - First: `KeywordMessageClassifier` — 200+ emergency phrases, returns immediately on CRITICAL/HIGH
+  - Then: `TFLiteMessageClassifier` — Keras neural model, 10-class softmax, with confidence gate
+
+**Priority mapping:**
+| Priority | Categories |
+|----------|-----------|
+| CRITICAL | MEDICAL, COLLAPSE |
+| HIGH | FIRE, FLOOD, SECURITY |
+| NORMAL | INFRASTRUCTURE, WEATHER, MISSING_PERSON, RESOURCE_REQUEST |
+| NONE | Unclassified |
+
+> **English only** — both the keyword rules and TFLite model vocabulary are English-based. Multi-language classification is a future goal.
+
+### Emergency Classification
+```
+ai/emergency/EmergencyClassification.kt  — shouldShowEmergencyBadge(), categoryEmojiAndLabel()
+ai/report/ICS213ReportData.kt            — Data classes for FEMA ICS-213 report
+ai/report/ICS213ReportGenerator.kt       — Pure HTML generator (no Android deps)
+```
+
+### Location Attach Dialog
+
+When a message is classified as CRITICAL or HIGH, `LocationAttachSheet` appears:
+- **Send** — sends message with GPS/manual location appended (`📍 lat,lon`)
+- **Skip** — closes dialog, message is **not** sent
+- **Swipe-dismiss** — closes dialog, message is **not** sent
+
+### Voice Input
+```
+VoskManager       — Model loading, recognition lifecycle
+VoiceRecorder     — PCM audio capture
+VoiceVisualizer   — Compose waveform display
+```
+
+**Model Location**: `app/src/main/assets/vosk-model-small-en-us-0.15/` (not in repo, downloaded at runtime)
+
+---
+
+## 10. Protocol & Wire Format
+
+### Message Types (BinaryProtocol.kt)
+- `MESSAGE` (0x01) — Standard chat message
+- `IDENTITY_ANNOUNCEMENT` (0x02) — Public key broadcast
+- `FRAGMENT` (0x03) — Large message chunking
+- `ACK` (0x04) — Delivery acknowledgment
+- `ROUTE_REQUEST` (0x05) — Source routing discovery
+
+### Packet Structure
+```
+[1 byte: type][2 bytes: payload length][variable: payload][optional: padding]
+```
+
+See `docs/file_transfer.md` for file transfer protocol spec.  
+See `docs/SOURCE_ROUTING.md` for multi-hop routing spec.
+
+---
+
+## 11. Contributing Guidelines
+
+### Git Workflow (MANDATORY)
+
+> These rules apply to every task, no exceptions.
+
+**Branch naming — always create a new branch from develop before touching any code:**
+- New feature → `git checkout -b feature/short-description`
+- Bug fix → `git checkout -b fix/short-description`
+
+**Commits — NEVER commit on behalf of the user:**
+- After completing work, leave all changes **uncommitted**.
+- The user reviews the diff and commits manually.
+- Do not run `git add`, `git commit`, or `git push` at the end of a task.
+
+### Before Making Changes
+1. Read relevant `docs/*.md` files
+2. Check `AGENTS.md` for architectural constraints
+3. Verify permission requirements for new features
+4. Test with both BLE enabled and disabled
+5. **Module placement**: place new code in `:resqmesh-ai` if it has no Android/Compose deps (see Section 9)
+
+### After Making Changes
+1. **Update `CHANGELOG.md`** — mandatory after every completed feature or bug fix.
+
+   **What to update:**
+   - Add entries under the current `[0.x.x]` block (create a new version block if none exists).
+   - `### Added` — new files, features, behaviors, or data structures introduced.
+   - `### Fixed` — bugs corrected; include the symptom (what was wrong) and the fix (what changed).
+   - `### Changed` — refactors or behavioral changes to existing functionality.
+
+   **Format rules:**
+   - One bullet per logical change (not per file).
+   - Mention affected class/file names in backticks where useful (`BluetoothPacketBroadcaster`, `RoutedPacket`).
+   - For bug fixes: state the broken behavior first, then the fix. Example:
+     `ICS-213 date rendered as "2026--0-3-" due to double-formatting; now uses yyyy-MM-dd directly`
+   - Do **not** write vague entries like "fixed bug" or "updated code".
+
+### Code Style
+- Kotlin official conventions
+- Compose: hoist state, use `remember` judiciously
+- Prefer `Flow` over callbacks for async streams
+- Document public APIs with KDoc
+
+### Security Considerations
+- Never log private keys or decrypted message content
+- All crypto operations must use `SecureIdentityStateManager`
+- Key material must not traverse the heap as `String`
+
+---
+
+## 12. Emergency Contacts
+
+- Architecture questions: See `AGENTS.md`
+- Protocol specs: See `docs/` directory
+- Build issues: Check `gradle/libs.versions.toml` for version conflicts
+
+---
+
+*Last updated: April 2026 — added image-to-category pipeline (MobileNetV2 + ML Kit + CompositeClassifier), vision module docs, model assets, LocationAttachSheet behavior, updated repo path*

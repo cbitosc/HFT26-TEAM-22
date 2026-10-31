@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SanketSetu signal-bridge mark for the status bar (monochrome by platform rule) -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <group
+        android:scaleX="0.12"
+        android:scaleY="0.12"
+        android:translateX="0"
+        android:translateY="0">
+        <path
+            android:pathData="M24,100H176M38,100A62,62 0 0 1 162,100M58,100A42,42 0 0 1 142,100M78,100A22,22 0 0 1 122,100"
+            android:strokeColor="#FFFFFF"
+            android:strokeWidth="12"
+            android:strokeLineCap="round" />
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M91,100a9,9 0 1 0 18,0a9,9 0 1 0 -18,0zM132,56a14,14 0 1 0 28,0a14,14 0 1 0 -28,0z" />
+    </group>
+</vector>
