@@ -71,7 +71,7 @@
       })();
 
       const map = L.map("map", { zoomControl: true, minZoom: 2, maxZoom: 21 }).setView([0, 0], 3);
-      L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png", { maxZoom: 21, attribution: "&copy; OpenStreetMap &copy; Carto", opacity: 1.0 }).addTo(map);
+      L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "&copy; OpenStreetMap contributors", opacity: 1.0 }).addTo(map);
 
       let selectedGeohash = "";
       let gridLayer = L.layerGroup().addTo(map);
